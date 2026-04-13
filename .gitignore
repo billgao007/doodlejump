@@ -1,5 +1,6 @@
 .vs/
 .vscode/
+.DS_Store
 
 x64/
 Project2/x64/
