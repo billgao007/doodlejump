@@ -188,6 +188,11 @@ void InitLogic() {
     g_game.slow_timer = 0;
     g_game.logic_accumulator = 0.0f;
     g_game.score = 0;
+    g_game.endless_mode = 0;
+    g_game.boss_respawn_count = 0;
+    g_game.damage_bonus_level = 0;
+    g_game.next_damage_bonus_score = 500; // 每500分伤害翻倍
+    g_game.boss_respawn_effect_timer = 0;
 
     InitBulletPool();
     for (int i = 0; i < MAX_BUFFS; i++) g_game.buffs[i].active = 0;
@@ -226,6 +231,12 @@ static void SpawnBuff(float x, float y) {
     }
 }
 
+// 获取 Boss 技能伤害缩放系数（随重生次数递减）
+static float GetBossSkillDmgScale() {
+    if (!g_game.endless_mode) return 1.0f;
+    return 1.0f / (1.0f + 0.15f * g_game.boss_respawn_count);
+}
+
 // Boss 弹幕散射：扇形发射子弹
 static void FireBossSpread(float bx, float by) {
     Boss* b = &g_game.boss;
@@ -246,12 +257,47 @@ static void FireBossSpread(float bx, float by) {
         node->bullet.y = by + b->height;
         node->bullet.vx = base_speed * sinf(angle_rad);  // 水平分量
         node->bullet.vy = base_speed * cosf(angle_rad);  // 垂直分量（向下）
-        node->bullet.damage = 8;
+        int spread_dmg = (int)(8.0f * GetBossSkillDmgScale());
+        if (spread_dmg < 1) spread_dmg = 1;
+        node->bullet.damage = spread_dmg;
         node->bullet.is_boss_bullet = 1;
 
         node->next = g_game.bullet_active_head;
         g_game.bullet_active_head = node;
     }
+}
+
+// Boss 华丽复活（无尽模式）
+void RespawnBoss() {
+    Boss* b = &g_game.boss;
+    g_game.boss_respawn_count++;
+
+    // 血量翻倍
+    int new_max_hp = 2000 * (1 << g_game.boss_respawn_count); // 2^count * 2000
+    b->max_hp = new_max_hp;
+    b->hp = new_max_hp;
+    b->phase = 1;
+
+    // 速度递增：每重生一次 +20%
+    float sign = (b->vx > 0) ? 1.0f : -1.0f;
+    b->vx = sign * 3.0f * (1.0f + 0.2f * g_game.boss_respawn_count);
+
+    // 技能频率递增（skill_timer 缩短）
+    b->skill_timer = (int)(120.0f / (1.0f + 0.3f * g_game.boss_respawn_count));
+    if (b->skill_timer < 30) b->skill_timer = 30;
+
+    // 重置技能状态
+    b->laser_warning_time = 0;
+    b->laser_active_time = 0;
+    b->spread_warning_time = 0;
+    b->spread_fire_timer = 0;
+    b->spread_wave_fired = 0;
+
+    // 重力恢复正常
+    g_game.gravity_dir = 1;
+
+    // 华丽复活特效计时（2秒）
+    g_game.boss_respawn_effect_timer = 2 * FPS;
 }
 
 // 在空中随机位置生成高跳 Buff
@@ -403,6 +449,10 @@ static void DoLogicStep() {
                 bullet->x > b->x && bullet->x < b->x + b->width &&
                 bullet->y > b->y && bullet->y < b->y + b->height) {
                 b->hp -= bullet->damage;
+                // 无尽模式：分数基于对Boss造成的伤害
+                if (g_game.endless_mode) {
+                    g_game.score += bullet->damage;
+                }
                 SpawnHitParticles(bullet->x, bullet->y, bullet->damage);
                 should_remove = 1;
 
@@ -483,7 +533,9 @@ static void DoLogicStep() {
     // 撞击 Boss 扣血弹开
     if (p->x + p->radius > b->x && p->x - p->radius < b->x + b->width &&
         p->y - p->radius < b->y + b->height && p->y + p->radius > b->y) {
-        p->hp -= 15;
+        int contact_dmg = (int)(15.0f * GetBossSkillDmgScale());
+        if (contact_dmg < 2) contact_dmg = 2;
+        p->hp -= contact_dmg;
         p->vy = (g_game.gravity_dir == 1) ? 5.0f : -5.0f; // 向下弹开
     }
 
@@ -519,11 +571,21 @@ static void DoLogicStep() {
             // 激光源实时跟随 Boss 移动
             b->laser_x = b->x + b->width / 2;
             // 判定激光伤害
-            if (p->x > b->laser_x - 15 && p->x < b->laser_x + 15) p->hp -= 1; // 每帧扣1血
+            if (p->x > b->laser_x - 15 && p->x < b->laser_x + 15) {
+                int laser_dmg = (int)(1.0f * GetBossSkillDmgScale());
+                if (laser_dmg < 1) laser_dmg = 1;
+                p->hp -= laser_dmg; // 每帧扣血，随重生递减
+            }
         } else {
             b->skill_timer--;
             if (b->skill_timer <= 0) {
-                b->skill_timer = GetRandomInt(100, 200);
+                // 技能间隔随重生缩短
+                int base_interval = GetRandomInt(100, 200);
+                if (g_game.endless_mode) {
+                    base_interval = (int)(base_interval / (1.0f + 0.3f * g_game.boss_respawn_count));
+                    if (base_interval < 40) base_interval = 40;
+                }
+                b->skill_timer = base_interval;
                 int skill_roll = GetRandomInt(0, 2);
                 if (skill_roll == 0) {
                     // 技能1：瞄准激光
@@ -554,8 +616,33 @@ static void DoLogicStep() {
         }
     }
 
+    // 伤害翻倍检查：基于爬升高度（分数）
+    if (g_game.endless_mode && g_game.score >= g_game.next_damage_bonus_score) {
+        g_game.damage_bonus_level++;
+        g_game.player.base_damage *= 2;
+        g_game.next_damage_bonus_score += 500; // 下一档 +500 分
+        SetBuffHint(_T("子弹伤害翻倍!"));
+    }
+
+    // Boss 复活特效计时
+    if (g_game.boss_respawn_effect_timer > 0) {
+        g_game.boss_respawn_effect_timer--;
+    }
+
     // 死亡判定
-    if (p->hp <= 0 || b->hp <= 0) {
+    if (b->hp <= 0) {
+        if (g_game.endless_mode) {
+            // 无尽模式：Boss 华丽复活
+            RespawnBoss();
+        } else {
+            // 普通模式：进入胜利界面
+            if (g_game.score > g_game.current_user.max_score) {
+                g_game.current_user.max_score = g_game.score;
+                SaveHighScore();
+            }
+            g_game.state = STATE_VICTORY;
+        }
+    } else if (p->hp <= 0) {
         if (g_game.score > g_game.current_user.max_score) {
             g_game.current_user.max_score = g_game.score;
             SaveHighScore();
@@ -565,12 +652,13 @@ static void DoLogicStep() {
 }
 
 void UpdateLogic() {
-    // 如果不在游戏状态，直接跳过后续的物理模拟
-    if (g_game.state != STATE_PLAYING) {
-        // 重置初始化，这样下次进入游戏时可以重新初始化
+    // 如果不在游戏状态（胜利界面除外），直接跳过并重置初始化标记
+    if (g_game.state != STATE_PLAYING && g_game.state != STATE_VICTORY) {
         logic_initialized = 0; 
         return;
     }
+    // 胜利界面期间不跑逻辑，但保留初始化标记
+    if (g_game.state == STATE_VICTORY) return;
 
 
     // 如果还没初始化，则进行初始化

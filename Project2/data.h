@@ -18,7 +18,7 @@
 #define MAX_BUFFS 10
 #define MAX_PARTICLES 64
 
-typedef enum { STATE_AUTH, STATE_MENU, STATE_PLAYING, STATE_GAMEOVER, STATE_RHYTHM } GameState;
+typedef enum { STATE_AUTH, STATE_MENU, STATE_PLAYING, STATE_VICTORY, STATE_GAMEOVER, STATE_RHYTHM } GameState;
 
 typedef enum { MODE_NORMAL, MODE_RHYTHM } GameMode;
 
@@ -214,6 +214,13 @@ typedef struct {
 
     int score;
     int is_running;
+
+    // 无尽连战模式
+    int endless_mode;           // 0=普通, 1=无尽连战
+    int boss_respawn_count;     // Boss 重生次数
+    int damage_bonus_level;     // 伤害翻倍等级（每级翻倍一次）
+    int next_damage_bonus_score; // 下次伤害翻倍需要的分数
+    int boss_respawn_effect_timer; // Boss 复活特效计时器
 } GameData;
 
 extern GameData g_game;

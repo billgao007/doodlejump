@@ -166,6 +166,27 @@ void ProcessInput() {
         return;
     }
 
+    // 胜利界面（击败Boss后）
+    if (g_game.state == STATE_VICTORY) {
+        if (GetAsyncKeyState(VK_SPACE) & 0x8000) {
+            // 进入无尽连战模式
+            while (GetAsyncKeyState(VK_SPACE) & 0x8000) Sleep(10);
+            g_game.endless_mode = 1;
+            g_game.boss_respawn_count = 0;
+            g_game.damage_bonus_level = 0;
+            g_game.next_damage_bonus_score = 500;
+            g_game.boss_respawn_effect_timer = 2 * FPS;
+            // Boss 复活并继续游戏
+            RespawnBoss();
+            g_game.state = STATE_PLAYING;
+        }
+        if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) {
+            while (GetAsyncKeyState(VK_ESCAPE) & 0x8000) Sleep(10);
+            g_game.state = STATE_MENU;
+        }
+        return;
+    }
+
     // 游戏内交互 
     if (g_game.state == STATE_PLAYING) {
         g_game.player.vx = 0;

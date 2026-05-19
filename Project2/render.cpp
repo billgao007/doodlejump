@@ -235,6 +235,9 @@ static void DrawGame() {
     // 4. 画 Boss & 技能
     Boss* b = &g_game.boss;
 
+    // Boss 复活特效（在 Boss 本体下方绘制）
+    DrawBossRespawnEffect();
+
     // 散射预警：Boss 红色闪烁
     if (b->spread_warning_time > 0) {
         long long tick = GetGameTimeMs();
@@ -264,6 +267,26 @@ static void DrawGame() {
         g_game.player.base_damage, g_game.player.dmg_mult, g_game.player.special_buffs, g_game.player.high_jump_charges);
     outtextxy(120, SCREEN_HEIGHT - 20, textBuf);
 
+    // 无尽模式专属 HUD
+    if (g_game.endless_mode) {
+        settextcolor(RGB(255, 215, 0)); settextstyle(14, 0, _T("Consolas"));
+        TCHAR endless_str[64];
+        _stprintf_s(endless_str, 64, _T("Round: %d  |  HP: x%d  |  Dmg Lv: %d"),
+            g_game.boss_respawn_count + 1,
+            1 << g_game.boss_respawn_count,
+            g_game.damage_bonus_level);
+        outtextxy(10, 22, endless_str);
+
+        // 伤害翻倍进度条
+        int progress = (g_game.score % 500) * 100 / 500;
+        setfillcolor(RGB(60, 60, 60));
+        solidrectangle(SCREEN_WIDTH - 110, 5, SCREEN_WIDTH - 10, 14);
+        setfillcolor(RGB(255, 200, 0));
+        solidrectangle(SCREEN_WIDTH - 110, 5, SCREEN_WIDTH - 110 + progress, 14);
+        settextcolor(WHITE); settextstyle(10, 0, _T("Consolas"));
+        outtextxy(SCREEN_WIDTH - 108, 5, _T("NEXT DMG x2"));
+    }
+
     if (g_game.buff_hint_timer > 0 && g_game.buff_hint[0] != '\0') {
         settextstyle(20, 0, _T("Consolas"));
         settextcolor(BLACK);
@@ -291,6 +314,96 @@ static void DrawGameOver() {
     TCHAR str[64]; _stprintf_s(str, 64, _T("Score: %d  Max: %d"), g_game.score, g_game.current_user.max_score);
     outtextxy(80, 260, str);
     outtextxy(80, 320, _T("Press SPACE to Restart"));
+}
+
+// ========== 胜利界面（击败Boss后） ==========
+static void DrawVictory() {
+    // 背景
+    setfillcolor(RGB(20, 20, 40));
+    solidrectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    // 主标题
+    settextcolor(RGB(255, 215, 0)); settextstyle(36, 0, _T("Consolas"));
+    outtextxy(35, 100, _T("BOSS DEFEATED!"));
+
+    // 分数
+    settextcolor(WHITE); settextstyle(22, 0, _T("Consolas"));
+    TCHAR str[64];
+    _stprintf_s(str, 64, _T("Score: %d"), g_game.score);
+    int tw = textwidth(str);
+    outtextxy((SCREEN_WIDTH - tw) / 2, 180, str);
+
+    _stprintf_s(str, 64, _T("Best: %d"), g_game.current_user.max_score);
+    tw = textwidth(str);
+    outtextxy((SCREEN_WIDTH - tw) / 2, 210, str);
+
+    // 选项
+    settextstyle(20, 0, _T("Consolas"));
+    long long tick = GetGameTimeMs();
+    settextcolor(RGB(100, 255, 100));
+    outtextxy(50, 280, _T("[SPACE] 无尽连战模式"));
+
+    // 闪烁提示
+    if ((tick / 600) % 2) {
+        settextcolor(RGB(255, 255, 100));
+        outtextxy(60, 320, _T("Boss 血量逐次翻倍!"));
+        outtextxy(60, 345, _T("爬升越高，子弹越强!"));
+    }
+
+    settextcolor(RGB(180, 180, 180));
+    outtextxy(80, 400, _T("[ESC] 返回主菜单"));
+}
+
+// ========== Boss 复活特效 ==========
+static void DrawBossRespawnEffect() {
+    if (g_game.boss_respawn_effect_timer <= 0) return;
+
+    Boss* b = &g_game.boss;
+    float cx = b->x + b->width / 2;
+    float cy = b->y + b->height / 2;
+    float t = 1.0f - (float)g_game.boss_respawn_effect_timer / (2.0f * FPS); // 0 → 1
+    long long tick = GetGameTimeMs();
+
+    // 多层扩散光环
+    for (int ring = 0; ring < 3; ring++) {
+        float phase = t * 3.0f - ring * 0.35f;
+        if (phase < 0 || phase > 1.5f) continue;
+
+        int radius = (int)(phase * 150.0f);
+        int alpha = (int)(255 * (1.0f - phase / 1.5f));
+        int r = 255;
+        int g = ClampColor(215 - (int)(phase * 150));
+        int b = ClampColor(alpha / 3);
+
+        setlinecolor(RGB(r, g, b));
+        setlinestyle(PS_SOLID, 3 - ring);
+        circle((int)cx, (int)cy, radius);
+    }
+
+    // 粒子爆发
+    int particle_count = 24;
+    for (int i = 0; i < particle_count; i++) {
+        float angle = (float)i / particle_count * 6.28318f + t * 2.0f;
+        float dist = t * 120.0f + (i % 3) * 20.0f;
+        int px = (int)(cx + cosf(angle) * dist);
+        int py = (int)(cy + sinf(angle) * dist);
+        int alpha = (int)(200 * (1.0f - t));
+
+        int pr = 255;
+        int pg = ClampColor(200 - (int)(t * 150) + (i % 3) * 30);
+        int pb = ClampColor(alpha / 2 + (i % 2) * 50);
+        setfillcolor(RGB(pr, pg, pb));
+        solidcircle(px, py, 2 + (i % 3));
+    }
+
+    // 中心闪光
+    int flash_r = (int)(40 * (1.0f - t));
+    if (flash_r > 0) {
+        setfillcolor(RGB(255, 255, 200));
+        solidcircle((int)cx, (int)cy, flash_r);
+        setfillcolor(RGB(255, 255, 255));
+        solidcircle((int)cx, (int)cy, flash_r / 2);
+    }
 }
 
 // ========== 节奏模式：绘制打击粒子 ==========
@@ -631,6 +744,7 @@ void RenderFrame() {
     case STATE_AUTH: DrawAuth(); break;
     case STATE_MENU: DrawMenu(); break;
     case STATE_PLAYING: DrawGame(); break;
+    case STATE_VICTORY: DrawVictory(); break;
     case STATE_GAMEOVER: DrawGameOver(); break;
     case STATE_RHYTHM: DrawRhythm(); break;
     }
