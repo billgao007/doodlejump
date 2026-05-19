@@ -23,3 +23,9 @@ Project2/*.vcxproj.user
 *.VC.VC.opendb
 
 users.dat
+
+# Additional ignores for artifacts and packages
+**/Debug/
+*.exe
+*.recipe
+Project2_src.zip

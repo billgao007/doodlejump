@@ -7,6 +7,67 @@
 static int logic_initialized = 0;
 const TCHAR* DB_FILE = _T("users.dat");
 
+static void InitBulletPool() {
+    g_game.bullet_active_head = NULL;
+    g_game.bullet_free_head = &g_game.bullet_pool[0];
+    for (int i = 0; i < MAX_BULLETS - 1; i++) {
+        g_game.bullet_pool[i].next = &g_game.bullet_pool[i + 1];
+    }
+    g_game.bullet_pool[MAX_BULLETS - 1].next = NULL;
+}
+
+static void SetBuffHint(const TCHAR* text) {
+    _tcscpy_s(g_game.buff_hint, 64, text);
+    g_game.buff_hint_timer = 2 * FPS;
+}
+
+static void SpawnHitParticles(float x, float y, int damage) {
+    int base_count = 4 + damage / 10;
+    if (base_count > 10) base_count = 10;
+
+    for (int i = 0; i < MAX_PARTICLES && base_count > 0; i++) {
+        if (g_game.particles[i].life > 0) continue;
+
+        int spread = GetRandomInt(-30, 30);
+        int red = 200 + GetRandomInt(0, 55);
+        int green = 50 + GetRandomInt(0, 80);
+        int blue = GetRandomInt(0, 40);
+
+        g_game.particles[i].x = x;
+        g_game.particles[i].y = y;
+        g_game.particles[i].vx = spread / 20.0f;
+        g_game.particles[i].vy = -GetRandomInt(10, 35) / 10.0f;
+        g_game.particles[i].life = 18 + GetRandomInt(0, 10);
+        g_game.particles[i].max_life = g_game.particles[i].life;
+        g_game.particles[i].r = red;
+        g_game.particles[i].g = green;
+        g_game.particles[i].b = blue;
+        g_game.particles[i].radius = 2 + GetRandomInt(0, 2);
+        base_count--;
+    }
+}
+
+static void FireBulletBurst(float x, float y, int damage) {
+    if (!g_game.bullet_free_head) return;
+
+    int bullet_count = 1 << g_game.player.bullet_double_stacks;
+    if (bullet_count > 6) bullet_count = 6;
+
+    float center = (bullet_count - 1) * 0.5f;
+    for (int i = 0; i < bullet_count && g_game.bullet_free_head; i++) {
+        BulletNode* node = g_game.bullet_free_head;
+        g_game.bullet_free_head = node->next;
+
+        node->bullet.x = x + (i - center) * 10.0f;
+        node->bullet.y = y;
+        node->bullet.vy = -12.0f; // 子弹永远向上飞
+        node->bullet.damage = damage;
+
+        node->next = g_game.bullet_active_head;
+        g_game.bullet_active_head = node;
+    }
+}
+
 
 
 
@@ -57,7 +118,10 @@ int AttemptRegister(const TCHAR* username, const TCHAR* password) {
     newUser.max_score = 0; // 新用户最高分为 0
 
     // 将新用户写入文件末尾
-    fwrite(&newUser, sizeof(User), 1, fp);
+    if (fwrite(&newUser, sizeof(User), 1, fp) != 1) {
+        fclose(fp);
+        return 0; // 写入失败
+    }
     fclose(fp);
 
     // 注册成功后自动登录
@@ -78,7 +142,10 @@ void SaveHighScore() {
             // 找到当前用户后，将文件指针往回退一个 User 的长度
             fseek(fp, pos, SEEK_SET);
             // 覆盖写入更新了 max_score 的数据
-            fwrite(&g_game.current_user, sizeof(User), 1, fp);
+            if (fwrite(&g_game.current_user, sizeof(User), 1, fp) != 1) {
+                fclose(fp);
+                return; // 写入失败
+            }
             break;
         }
         pos = ftell(fp); // 记录当前指针位置
@@ -97,6 +164,7 @@ void InitLogic() {
     g_game.player.fire_rate = 30; // 初始半秒发一发
     g_game.player.fire_timer = 0;
     g_game.player.special_buffs = 0;
+    g_game.player.bullet_double_stacks = 0;
 
     g_game.boss.x = SCREEN_WIDTH / 2.0f - 40.0f;
     g_game.boss.y = 20.0f;
@@ -114,8 +182,11 @@ void InitLogic() {
     g_game.logic_accumulator = 0.0f;
     g_game.score = 0;
 
-    for (int i = 0; i < MAX_BULLETS; i++) g_game.bullets[i].active = 0;
+    InitBulletPool();
     for (int i = 0; i < MAX_BUFFS; i++) g_game.buffs[i].active = 0;
+    for (int i = 0; i < MAX_PARTICLES; i++) g_game.particles[i].life = 0;
+    g_game.buff_hint[0] = '\0';
+    g_game.buff_hint_timer = 0;
 
     // 初始化平台
     for (int i = 0; i < PLATFORM_COUNT; i++) {
@@ -147,7 +218,7 @@ static void SpawnBuff(float x, float y) {
     }
 }
 
-// 物理与实体逻辑单步推进
+
 static void DoLogicStep() {
     Player* p = &g_game.player;
     Boss* b = &g_game.boss;
@@ -190,28 +261,46 @@ static void DoLogicStep() {
         }
     }
 
-    // 滚屏 (仅在正常重力下视角跟随向上)
+    // 屏幕滚动
     if (g_game.gravity_dir == 1 && p->y < SCROLL_THRESHOLD) {
         float offset = SCROLL_THRESHOLD - p->y;
         p->y = SCROLL_THRESHOLD;
         g_game.score += (int)offset;
-        
+
         for (int i = 0; i < PLATFORM_COUNT; i++) {
             g_game.platforms[i].y += offset;
             if (g_game.platforms[i].y > SCREEN_HEIGHT) {
                 g_game.platforms[i].x = (float)GetRandomInt(0, SCREEN_WIDTH - 60);
                 g_game.platforms[i].y = 0.0f;
                 g_game.platforms[i].type = PLAT_NORMAL;
-                
+
                 if (GetRandomInt(1, 100) <= 20) SpawnBuff(g_game.platforms[i].x, g_game.platforms[i].y);
             }
         }
         for (int i = 0; i < MAX_BUFFS; i++) {
             if (g_game.buffs[i].active) g_game.buffs[i].y += offset;
         }
+    } else if (g_game.gravity_dir == -1 && p->y > SCREEN_HEIGHT - SCROLL_THRESHOLD) {
+        float offset = p->y - (SCREEN_HEIGHT - SCROLL_THRESHOLD);
+        p->y = SCREEN_HEIGHT - SCROLL_THRESHOLD;
+        g_game.score += (int)offset;
+
+        for (int i = 0; i < PLATFORM_COUNT; i++) {
+            g_game.platforms[i].y -= offset;
+            if (g_game.platforms[i].y + g_game.platforms[i].height < 0.0f) {
+                g_game.platforms[i].x = (float)GetRandomInt(0, SCREEN_WIDTH - 60);
+                g_game.platforms[i].y = SCREEN_HEIGHT - g_game.platforms[i].height;
+                g_game.platforms[i].type = PLAT_NORMAL;
+
+                if (GetRandomInt(1, 100) <= 20) SpawnBuff(g_game.platforms[i].x, g_game.platforms[i].y);
+            }
+        }
+        for (int i = 0; i < MAX_BUFFS; i++) {
+            if (g_game.buffs[i].active) g_game.buffs[i].y -= offset;
+        }
     }
 
-    // 4. 边缘掉落与扣血判定
+    // 边缘掉落与扣血判定
     if (p->y > SCREEN_HEIGHT + p->radius) { // 掉出底部
         p->hp -= 20;
         p->vy = JUMP_FORCE * 1.5f; // 高高弹起
@@ -220,44 +309,54 @@ static void DoLogicStep() {
         p->vy = -JUMP_FORCE * 1.5f;
     }
 
-    // 5. 玩家射击
+    // 玩家射击
     p->fire_timer++;
     if (p->fire_timer >= p->fire_rate) {
         p->fire_timer = 0;
-        for (int i = 0; i < MAX_BULLETS; i++) {
-            if (!g_game.bullets[i].active) {
-                g_game.bullets[i].active = 1;
-                g_game.bullets[i].x = p->x;
-                g_game.bullets[i].y = p->y;
-                g_game.bullets[i].vy = -12.0f; // 子弹永远向上飞
-                g_game.bullets[i].damage = (int)(p->base_damage * p->dmg_mult);
-                break;
-            }
-        }
+            FireBulletBurst(p->x, p->y, (int)(p->base_damage * p->dmg_mult));
     }
 
-    // 6. 子弹更新与伤害 Boss
-    for (int i = 0; i < MAX_BULLETS; i++) {
-        if (g_game.bullets[i].active) {
-            g_game.bullets[i].y += g_game.bullets[i].vy;
-            if (g_game.bullets[i].y < 0) g_game.bullets[i].active = 0;
-            // 打中Boss
-            if (g_game.bullets[i].active &&
-                g_game.bullets[i].x > b->x && g_game.bullets[i].x < b->x + b->width &&
-                g_game.bullets[i].y > b->y && g_game.bullets[i].y < b->y + b->height) {
-                b->hp -= g_game.bullets[i].damage;
-                g_game.bullets[i].active = 0;
-                
-                // 二阶段判定
-                if (b->hp < b->max_hp / 2 && b->phase == 1) {
-                    b->phase = 2;
-                    g_game.gravity_dir = -1; // 重力反转！
-                }
+    // 子弹更新与伤害 Boss
+    BulletNode* prev = NULL;
+    BulletNode* node = g_game.bullet_active_head;
+    while (node) {
+        BulletNode* next = node->next;
+        Bullet* bullet = &node->bullet;
+        int should_remove = 0;
+
+        bullet->y += bullet->vy;
+        if (bullet->y < 0) {
+            should_remove = 1;
+        }
+
+        // 打中Boss
+        if (!should_remove &&
+            bullet->x > b->x && bullet->x < b->x + b->width &&
+            bullet->y > b->y && bullet->y < b->y + b->height) {
+            b->hp -= bullet->damage;
+            should_remove = 1;
+
+            // 二阶段判定
+            if (b->hp < b->max_hp / 2 && b->phase == 1) {
+                b->phase = 2;
+                g_game.gravity_dir = -1; // 重力反转！
             }
         }
+
+        if (should_remove) {
+            if (prev) prev->next = next;
+            else g_game.bullet_active_head = next;
+
+            node->next = g_game.bullet_free_head;
+            g_game.bullet_free_head = node;
+        } else {
+            prev = node;
+        }
+
+        node = next;
     }
 
-    // 7. Buff 碰撞
+    // Buff 碰撞
     for (int i = 0; i < MAX_BUFFS; i++) {
         if (g_game.buffs[i].active) {
             Buff* buff = &g_game.buffs[i];
@@ -269,15 +368,40 @@ static void DoLogicStep() {
                 if (buff->type == BUFF_FIRE_RATE) {
                     p->fire_rate -= 5;
                     if (p->fire_rate < 10) p->fire_rate = 10;
+                        SetBuffHint(_T("发射速度提升"));
                 }
-                else if (buff->type == BUFF_DMG_ADD) p->base_damage += 5;
-                else if (buff->type == BUFF_DMG_MULT) p->dmg_mult += 0.2f;
-                else if (buff->type == BUFF_TIME) p->special_buffs++;
+                    else if (buff->type == BUFF_DMG_ADD) {
+                        p->base_damage += 5;
+                        SetBuffHint(_T("伤害提升"));
+                    }
+                    else if (buff->type == BUFF_DMG_MULT) {
+                        p->dmg_mult += 0.2f;
+                        if (p->bullet_double_stacks < 3) p->bullet_double_stacks++;
+                        SetBuffHint(_T("子弹翻倍"));
+                    }
+                    else if (buff->type == BUFF_TIME) {
+                        p->special_buffs++;
+                        SetBuffHint(_T("时间道具 +1"));
+                    }
             }
         }
     }
 
-    // 8. Boss 逻辑
+        if (g_game.buff_hint_timer > 0) {
+            g_game.buff_hint_timer--;
+            if (g_game.buff_hint_timer == 0) g_game.buff_hint[0] = '\0';
+        }
+
+        for (int i = 0; i < MAX_PARTICLES; i++) {
+            Particle* particle = &g_game.particles[i];
+            if (particle->life <= 0) continue;
+            particle->x += particle->vx;
+            particle->y += particle->vy;
+            particle->vy += 0.12f;
+            particle->life--;
+        }
+
+    // Boss 逻辑
     b->x += b->vx;
     if (b->x <= 0 || b->x + b->width >= SCREEN_WIDTH) b->vx *= -1; // 左右来回
 
@@ -325,10 +449,18 @@ static void DoLogicStep() {
 }
 
 void UpdateLogic() {
+    // 如果不在游戏状态，直接跳过后续的物理模拟
     if (g_game.state != STATE_PLAYING) {
-        if (g_game.state == STATE_PLAYING && !logic_initialized) InitLogic();
-        else if (g_game.state == STATE_GAMEOVER || g_game.state == STATE_MENU) logic_initialized = 0;
+        // 重置初始化，这样下次进入游戏时可以重新初始化
+        logic_initialized = 0; 
         return;
+    }
+
+
+    // 如果还没初始化，则进行初始化
+    if (!logic_initialized) {
+        InitLogic();
+        logic_initialized = 1;
     }
 
     // 根据流速缩放，使用累加器来决定执行多少次逻辑步进
