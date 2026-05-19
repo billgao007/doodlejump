@@ -61,8 +61,10 @@ static void FireBulletBurst(float x, float y, int damage) {
 
         node->bullet.x = x + (i - center) * 10.0f;
         node->bullet.y = y;
+        node->bullet.vx = 0;
         node->bullet.vy = -12.0f; // 子弹永远向上飞
         node->bullet.damage = damage;
+        node->bullet.is_boss_bullet = 0;
 
         node->next = g_game.bullet_active_head;
         g_game.bullet_active_head = node;
@@ -177,6 +179,9 @@ void InitLogic() {
     g_game.boss.skill_timer = 120; // 2秒后放技能
     g_game.boss.laser_warning_time = 0;
     g_game.boss.laser_active_time = 0;
+    g_game.boss.spread_warning_time = 0;
+    g_game.boss.spread_fire_timer = 0;
+    g_game.boss.spread_wave_fired = 0;
 
     g_game.gravity_dir = 1;
     g_game.time_scale = 1.0f;
@@ -218,6 +223,34 @@ static void SpawnBuff(float x, float y) {
             g_game.buffs[i].type = (BuffType)GetRandomInt(0, 3);
             break;
         }
+    }
+}
+
+// Boss 弹幕散射：扇形发射子弹
+static void FireBossSpread(float bx, float by) {
+    Boss* b = &g_game.boss;
+    int bullet_count = (b->phase == 1) ? 5 : 7;
+    float fan_angle = (b->phase == 1) ? 50.0f : 70.0f; // 扇形角度（度）
+    float base_speed = (b->phase == 1) ? 4.0f : 5.5f;
+
+    float half_fan = fan_angle / 2.0f;
+    for (int i = 0; i < bullet_count && g_game.bullet_free_head; i++) {
+        BulletNode* node = g_game.bullet_free_head;
+        g_game.bullet_free_head = node->next;
+
+        // 均匀分布角度，中间一颗垂直向下
+        float angle_deg = -half_fan + (fan_angle / (float)(bullet_count - 1)) * i;
+        float angle_rad = angle_deg * 3.14159265f / 180.0f;
+
+        node->bullet.x = bx;
+        node->bullet.y = by + b->height;
+        node->bullet.vx = base_speed * sinf(angle_rad);  // 水平分量
+        node->bullet.vy = base_speed * cosf(angle_rad);  // 垂直分量（向下）
+        node->bullet.damage = 8;
+        node->bullet.is_boss_bullet = 1;
+
+        node->next = g_game.bullet_active_head;
+        g_game.bullet_active_head = node;
     }
 }
 
@@ -333,7 +366,7 @@ static void DoLogicStep() {
             FireBulletBurst(p->x, p->y, (int)(p->base_damage * p->dmg_mult));
     }
 
-    // 子弹更新与伤害 Boss
+    // 子弹更新与伤害 Boss / 玩家
     BulletNode* prev = NULL;
     BulletNode* node = g_game.bullet_active_head;
     while (node) {
@@ -341,22 +374,43 @@ static void DoLogicStep() {
         Bullet* bullet = &node->bullet;
         int should_remove = 0;
 
+        bullet->x += bullet->vx;
         bullet->y += bullet->vy;
-        if (bullet->y < 0) {
-            should_remove = 1;
-        }
 
-        // 打中Boss
-        if (!should_remove &&
-            bullet->x > b->x && bullet->x < b->x + b->width &&
-            bullet->y > b->y && bullet->y < b->y + b->height) {
-            b->hp -= bullet->damage;
-            should_remove = 1;
+        if (bullet->is_boss_bullet) {
+            // Boss 弹幕：超出屏幕底部或左右则移除
+            if (bullet->y > SCREEN_HEIGHT || bullet->x < -10 || bullet->x > SCREEN_WIDTH + 10) {
+                should_remove = 1;
+            }
+            // 打中玩家
+            if (!should_remove) {
+                float dx = bullet->x - p->x;
+                float dy = bullet->y - p->y;
+                if (sqrtf(dx * dx + dy * dy) < p->radius + 8.0f) {
+                    p->hp -= bullet->damage;
+                    SpawnHitParticles(bullet->x, bullet->y, bullet->damage);
+                    should_remove = 1;
+                }
+            }
+        } else {
+            // 玩家子弹：超出屏幕顶部则移除
+            if (bullet->y < 0) {
+                should_remove = 1;
+            }
 
-            // 二阶段判定
-            if (b->hp < b->max_hp / 2 && b->phase == 1) {
-                b->phase = 2;
-                g_game.gravity_dir = -1; // 重力反转！
+            // 打中Boss
+            if (!should_remove &&
+                bullet->x > b->x && bullet->x < b->x + b->width &&
+                bullet->y > b->y && bullet->y < b->y + b->height) {
+                b->hp -= bullet->damage;
+                SpawnHitParticles(bullet->x, bullet->y, bullet->damage);
+                should_remove = 1;
+
+                // 二阶段判定
+                if (b->hp < b->max_hp / 2 && b->phase == 1) {
+                    b->phase = 2;
+                    g_game.gravity_dir = -1; // 重力反转！
+                }
             }
         }
 
@@ -433,9 +487,29 @@ static void DoLogicStep() {
         p->vy = (g_game.gravity_dir == 1) ? 5.0f : -5.0f; // 向下弹开
     }
 
-    // Boss 一阶段技能
-    if (b->phase == 1) {
-        if (b->laser_warning_time > 0) {
+    // Boss 技能（一/二阶段共用）
+    {
+        // --- 弹幕散射 ---
+        if (b->spread_warning_time > 0) {
+            b->spread_warning_time--;
+            if (b->spread_warning_time == 0) {
+                // 预警结束，发射第一波
+                FireBossSpread(b->x + b->width / 2, b->y);
+                b->spread_wave_fired = 1;
+                if (b->phase == 2) {
+                    // 二阶段：延迟后再发射第二波
+                    b->spread_fire_timer = 25;
+                }
+            }
+        } else if (b->spread_fire_timer > 0) {
+            b->spread_fire_timer--;
+            if (b->spread_fire_timer == 0 && b->spread_wave_fired < 2) {
+                FireBossSpread(b->x + b->width / 2, b->y);
+                b->spread_wave_fired = 2;
+            }
+        }
+        // --- 激光 ---
+        else if (b->laser_warning_time > 0) {
             b->laser_warning_time--;
             // 激光源实时跟随 Boss 移动
             b->laser_x = b->x + b->width / 2;
@@ -449,15 +523,21 @@ static void DoLogicStep() {
         } else {
             b->skill_timer--;
             if (b->skill_timer <= 0) {
-                b->skill_timer = GetRandomInt(120, 240);
-                if (GetRandomInt(0, 1) == 0) {
+                b->skill_timer = GetRandomInt(100, 200);
+                int skill_roll = GetRandomInt(0, 2);
+                if (skill_roll == 0) {
                     // 技能1：瞄准激光
                     b->laser_warning_time = 90; // 1.5秒警告
                     b->laser_x = b->x + b->width / 2;
-                } else {
+                } else if (skill_roll == 1) {
                     // 技能2：改变随机平台
                     int idx = GetRandomInt(0, PLATFORM_COUNT - 1);
                     g_game.platforms[idx].type = (GetRandomInt(0, 1) == 0) ? PLAT_FAKE : PLAT_SPRING;
+                } else {
+                    // 技能3：弹幕散射
+                    b->spread_warning_time = 70; // 约1.2秒预警
+                    b->spread_fire_timer = 0;
+                    b->spread_wave_fired = 0;
                 }
             }
         }

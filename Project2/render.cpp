@@ -202,12 +202,21 @@ static void DrawGame() {
 
     setfillcolor(RGB(0, 0, 0));
     for (BulletNode* node = g_game.bullet_active_head; node; node = node->next) {
-        int damage = node->bullet.damage;
-        int red = ClampColor(120 + (damage - 10) * 10);
-        int green = ClampColor(90 - (damage - 10) * 4);
-        int blue = ClampColor(90 - (damage - 10) * 4);
-        setfillcolor(RGB(red, green, blue));
-        solidcircle((int)node->bullet.x, (int)node->bullet.y, 3);
+        if (node->bullet.is_boss_bullet) {
+            // Boss 弹幕：橙红色，稍大
+            setfillcolor(RGB(255, 80 + (node->bullet.damage * 5), 30));
+            solidcircle((int)node->bullet.x, (int)node->bullet.y, 5);
+            // 发光外圈
+            setfillcolor(RGB(255, 180, 80));
+            solidcircle((int)node->bullet.x, (int)node->bullet.y, 2);
+        } else {
+            int damage = node->bullet.damage;
+            int red = ClampColor(120 + (damage - 10) * 10);
+            int green = ClampColor(90 - (damage - 10) * 4);
+            int blue = ClampColor(90 - (damage - 10) * 4);
+            setfillcolor(RGB(red, green, blue));
+            solidcircle((int)node->bullet.x, (int)node->bullet.y, 3);
+        }
     }
 
     // 3.5 画 Boss 被击中的粒子特效
@@ -225,6 +234,18 @@ static void DrawGame() {
 
     // 4. 画 Boss & 技能
     Boss* b = &g_game.boss;
+
+    // 散射预警：Boss 红色闪烁
+    if (b->spread_warning_time > 0) {
+        long long tick = GetGameTimeMs();
+        int flash = ((tick / 100) % 2); // 每100ms交替闪烁
+        if (flash) {
+            setfillcolor(RGB(255, 60, 60));
+            solidrectangle((int)b->x - 4, (int)b->y - 4,
+                           (int)(b->x + b->width + 4), (int)(b->y + b->height + 4));
+        }
+    }
+
     putimage((int)b->x, (int)b->y, &img_boss);
     DrawLaserBeam(b);
 

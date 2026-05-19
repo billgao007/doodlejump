@@ -61,11 +61,15 @@ typedef struct {
     float laser_x;
     int laser_warning_time;
     int laser_active_time;
+    int spread_warning_time; // 弹幕散射预警计时
+    int spread_fire_timer;   // 弹幕多波发射间隔计时
+    int spread_wave_fired;   // 已发射波数
 } Boss;
 
 typedef struct {
-    float x, y, vy;
+    float x, y, vx, vy;
     int damage;
+    int is_boss_bullet; // 1=Boss弹幕(向下伤玩家), 0=玩家子弹(向上伤Boss)
 } Bullet;
 
 typedef struct BulletNode {
