@@ -12,6 +12,7 @@ static int menu_left_pressed = 0;
 static int menu_right_pressed = 0;
 static int rhythm_a_prev = 0;  // P1 录音：A 键上一帧状态
 static int rhythm_d_prev = 0;  // P1 录音：D 键上一帧状态
+static int plat_any_down_prev = 0; // P2 回放：上一帧是否有方向键按下
 static RhythmSubState rhythm_prev_sub_state = RHYTHM_PRE_START;
 
 
@@ -244,17 +245,25 @@ void ProcessInput() {
             rhythm_d_prev = d_now;
         }
 
-        // P2 (回放阶段): A/← = 板子去左轨，D/→ = 板子去右轨，松键回中
+        // P2 (回放阶段): A/← = 板子去左轨，D/→ = 板子去右轨，松键回中（边缘触发）
         if (g_game.rhythm_data.sub_state == RHYTHM_PHASE_ECHO) {
+            // 刚切换到回放阶段时重置状态
+            if (rhythm_prev_sub_state != RHYTHM_PHASE_ECHO) {
+                plat_any_down_prev = 0;
+            }
             int a_down = (GetAsyncKeyState('A') & 0x8000) || (GetAsyncKeyState(VK_LEFT) & 0x8000);
             int d_down = (GetAsyncKeyState('D') & 0x8000) || (GetAsyncKeyState(VK_RIGHT) & 0x8000);
+            int any_down = a_down || d_down;
+
             if (a_down) {
                 MovePlatform(TRACK_LEFT);
             } else if (d_down) {
                 MovePlatform(TRACK_RIGHT);
-            } else {
+            } else if (plat_any_down_prev && !any_down) {
+                // 边缘触发：刚从按下变为松开时，回中一次
                 ReleasePlatform(GetGameTimeMs());
             }
+            plat_any_down_prev = any_down;
         }
 
         // ESC 退出节奏模式

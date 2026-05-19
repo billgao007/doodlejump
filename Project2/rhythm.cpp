@@ -301,10 +301,12 @@ void RecordNote(long long current_time, TrackID track) {
 void MovePlatform(TrackID track) {
     RhythmData* rd = &g_game.rhythm_data;
     long long now = GetGameTimeMs();
-    if (now - rd->p2_input_time < 60) return;
-    rd->p2_input_time = now;
 
-    rd->platform_target_x = (track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
+    float target = (track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
+    // 已在目标位置则跳过，避免重复重置 lerp
+    if (fabsf(rd->platform_target_x - target) < 1.0f) return;
+
+    rd->platform_target_x = target;
     rd->platform_lerp_start = now;
     rd->platform_x = GetPlatformX(now);
 }
@@ -326,8 +328,8 @@ void AutoJudgeNotes(long long current_time) {
     float fall_speed = FALLING_SPEED * rd->fall_speed_mult;
     long long echo_start = rd->bar_start_time + rd->bar_duration / 2;
 
-    // 板子半宽 30px，player 半径 15px → 碰撞检测范围 ≈ 45px
-    float catch_range = 45.0f;
+    // 板子半宽 30px，player 半径 15px → 碰撞范围 55px（加宽容错）
+    float catch_range = 55.0f;
 
     for (int i = 0; i < rd->recorded_count; i++) {
         RhythmNote* note = &rd->recorded_sequence[i];
