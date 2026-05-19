@@ -9,6 +9,9 @@
 static int key_0_pressed = 0;
 static int menu_left_pressed = 0;
 static int menu_right_pressed = 0;
+static int rhythm_a_prev = 0;  // P1 录音：A 键上一帧状态
+static int rhythm_d_prev = 0;  // P1 录音：D 键上一帧状态
+static RhythmSubState rhythm_prev_sub_state = RHYTHM_PRE_START;
 
 
 static bool GetCustomInput(const TCHAR* title, const TCHAR* prompt, TCHAR* buf, int maxLen, bool isPwd) {
@@ -187,14 +190,24 @@ void ProcessInput() {
 
     // 节奏模式交互
     if (g_game.state == STATE_RHYTHM) {
-        // P1 (录音阶段): A = 左轨道，D = 右轨道 — 录制音符
+        // P1 (录音阶段): A = 左轨道，D = 右轨道 — 按下瞬间生成一个音符
         if (g_game.rhythm_data.sub_state == RHYTHM_PHASE_RECORD) {
-            if (GetAsyncKeyState('A') & 0x8000) {
+            // 刚切换到录音阶段时重置按键状态，避免上一轮按住带入
+            if (rhythm_prev_sub_state != RHYTHM_PHASE_RECORD) {
+                rhythm_a_prev = 0;
+                rhythm_d_prev = 0;
+            }
+            int a_now = (GetAsyncKeyState('A') & 0x8000) ? 1 : 0;
+            int d_now = (GetAsyncKeyState('D') & 0x8000) ? 1 : 0;
+            // 边缘触发：仅当按键从未按下变为按下时生成一个音符
+            if (a_now && !rhythm_a_prev) {
                 RecordNote(GetGameTimeMs(), TRACK_LEFT);
             }
-            if (GetAsyncKeyState('D') & 0x8000) {
+            if (d_now && !rhythm_d_prev) {
                 RecordNote(GetGameTimeMs(), TRACK_RIGHT);
             }
+            rhythm_a_prev = a_now;
+            rhythm_d_prev = d_now;
         }
 
         // P2 (回放阶段): A / 左箭头 = 移动板子到左轨，D / 右箭头 = 移动板子到右轨
@@ -212,5 +225,7 @@ void ProcessInput() {
             g_game.state = STATE_MENU;
             ResetRhythm();
         }
+
+        rhythm_prev_sub_state = g_game.rhythm_data.sub_state;
     }
 }

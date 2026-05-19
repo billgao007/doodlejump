@@ -267,6 +267,9 @@ static void DrawScorePopups() {
     int popup_count;
     const ScorePopup* popups = GetScorePopups(&popup_count);
 
+    // 文字透明背景
+    setbkmode(TRANSPARENT);
+
     for (int i = 0; i < popup_count; i++) {
         if (popups[i].life <= 0) continue;
 
@@ -305,6 +308,9 @@ static void DrawScorePopups() {
 
         settextstyle(18, 0, _T("Consolas")); // reset
     }
+
+    // 恢复默认背景模式
+    setbkmode(OPAQUE);
 }
 
 // ========== 节奏模式：绘制打击粒子 ==========
