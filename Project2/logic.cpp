@@ -5,6 +5,7 @@
 #include <string.h>
 #include <math.h>
 static int logic_initialized = 0;
+static int air_buff_timer = 0; // 空中高跳 Buff 生成计时器
 const TCHAR* DB_FILE = _T("users.dat");
 
 static void InitBulletPool() {
@@ -165,6 +166,7 @@ void InitLogic() {
     g_game.player.fire_timer = 0;
     g_game.player.special_buffs = 0;
     g_game.player.bullet_double_stacks = 0;
+    g_game.player.high_jump_charges = 0;
 
     g_game.boss.x = SCREEN_WIDTH / 2.0f - 40.0f;
     g_game.boss.y = 20.0f;
@@ -187,6 +189,7 @@ void InitLogic() {
     for (int i = 0; i < MAX_PARTICLES; i++) g_game.particles[i].life = 0;
     g_game.buff_hint[0] = '\0';
     g_game.buff_hint_timer = 0;
+    air_buff_timer = 0; // 重置空中 Buff 计时器
 
     // 初始化平台
     for (int i = 0; i < PLATFORM_COUNT; i++) {
@@ -213,6 +216,20 @@ static void SpawnBuff(float x, float y) {
             g_game.buffs[i].y = y - 15.0f;
             g_game.buffs[i].radius = 10.0f;
             g_game.buffs[i].type = (BuffType)GetRandomInt(0, 3);
+            break;
+        }
+    }
+}
+
+// 在空中随机位置生成高跳 Buff
+static void SpawnAirBuff() {
+    for (int i = 0; i < MAX_BUFFS; i++) {
+        if (!g_game.buffs[i].active) {
+            g_game.buffs[i].active = 1;
+            g_game.buffs[i].x = (float)GetRandomInt(30, SCREEN_WIDTH - 30);
+            g_game.buffs[i].y = (float)GetRandomInt(80, SCREEN_HEIGHT - 80);
+            g_game.buffs[i].radius = 12.0f;
+            g_game.buffs[i].type = BUFF_HIGH_JUMP;
             break;
         }
     }
@@ -360,7 +377,7 @@ static void DoLogicStep() {
     for (int i = 0; i < MAX_BUFFS; i++) {
         if (g_game.buffs[i].active) {
             Buff* buff = &g_game.buffs[i];
-            if (buff->y > SCREEN_HEIGHT) buff->active = 0; // 移出屏幕销毁
+            if (buff->y > SCREEN_HEIGHT || buff->y < -20) buff->active = 0; // 移出屏幕销毁
             
             float dx = p->x - buff->x; float dy = p->y - buff->y;
             if (sqrt(dx*dx + dy*dy) < p->radius + buff->radius) {
@@ -382,6 +399,10 @@ static void DoLogicStep() {
                     else if (buff->type == BUFF_TIME) {
                         p->special_buffs++;
                         SetBuffHint(_T("时间道具 +1"));
+                    }
+                    else if (buff->type == BUFF_HIGH_JUMP) {
+                        p->high_jump_charges++;
+                        SetBuffHint(_T("高跳充能 +1 (按9)"));
                     }
             }
         }
@@ -416,9 +437,13 @@ static void DoLogicStep() {
     if (b->phase == 1) {
         if (b->laser_warning_time > 0) {
             b->laser_warning_time--;
+            // 激光源实时跟随 Boss 移动
+            b->laser_x = b->x + b->width / 2;
             if (b->laser_warning_time == 0) b->laser_active_time = 30; // 激光激活 0.5 秒
         } else if (b->laser_active_time > 0) {
             b->laser_active_time--;
+            // 激光源实时跟随 Boss 移动
+            b->laser_x = b->x + b->width / 2;
             // 判定激光伤害
             if (p->x > b->laser_x - 15 && p->x < b->laser_x + 15) p->hp -= 1; // 每帧扣1血
         } else {
@@ -434,6 +459,17 @@ static void DoLogicStep() {
                     int idx = GetRandomInt(0, PLATFORM_COUNT - 1);
                     g_game.platforms[idx].type = (GetRandomInt(0, 1) == 0) ? PLAT_FAKE : PLAT_SPRING;
                 }
+            }
+        }
+    }
+
+    // 空中高跳 Buff 定时刷新（每8秒尝试生成一个）
+    {
+        air_buff_timer++;
+        if (air_buff_timer >= 8 * FPS) {
+            air_buff_timer = 0;
+            if (GetRandomInt(1, 100) <= 60) { // 60% 概率生成
+                SpawnAirBuff();
             }
         }
     }

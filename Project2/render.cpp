@@ -179,6 +179,16 @@ static void DrawGame() {
             else if (b->type == BUFF_TIME) {
                 putimage((int)(b->x - b->radius), (int)(b->y - b->radius), &img_buff_timeslow);
             }
+            else if (b->type == BUFF_HIGH_JUMP) {
+                // 高跳 Buff：蓝绿色发光球体
+                long long tick = GetGameTimeMs();
+                int pulse = (tick / 150) % 4;
+                int r = (int)b->radius + pulse;
+                setfillcolor(RGB(0, 200 + pulse * 10, 220));
+                solidcircle((int)b->x, (int)b->y, r);
+                setfillcolor(RGB(180, 240, 255));
+                solidcircle((int)b->x - r/3, (int)b->y - r/3, r/2);
+            }
             else {
                 setfillcolor(RGB(255, 255, 0));
                 solidcircle((int)b->x, (int)b->y, (int)b->radius);
@@ -229,8 +239,8 @@ static void DrawGame() {
     setfillcolor(GREEN);
     solidrectangle(10, SCREEN_HEIGHT - 20, 10 + (int)(100 * ((float)g_game.player.hp / g_game.player.max_hp)), SCREEN_HEIGHT - 5);
 
-    _stprintf_s(textBuf, 64, _T("Dmg: %d x%.1f | Time Items: %d"),
-        g_game.player.base_damage, g_game.player.dmg_mult, g_game.player.special_buffs);
+    _stprintf_s(textBuf, 64, _T("Dmg: %d x%.1f | Time: %d | Jump: %d"),
+        g_game.player.base_damage, g_game.player.dmg_mult, g_game.player.special_buffs, g_game.player.high_jump_charges);
     outtextxy(120, SCREEN_HEIGHT - 20, textBuf);
 
     if (g_game.buff_hint_timer > 0 && g_game.buff_hint[0] != '\0') {

@@ -27,7 +27,7 @@ typedef enum { TRACK_LEFT, TRACK_RIGHT } TrackID;
 typedef enum { JUDGMENT_NONE, JUDGMENT_PERFECT, JUDGMENT_GOOD, JUDGMENT_MISS } JudgmentType;
 
 typedef enum { PLAT_NORMAL, PLAT_FAKE, PLAT_SPRING } PlatType;
-typedef enum { BUFF_FIRE_RATE, BUFF_DMG_ADD, BUFF_DMG_MULT, BUFF_TIME } BuffType;
+typedef enum { BUFF_FIRE_RATE, BUFF_DMG_ADD, BUFF_DMG_MULT, BUFF_TIME, BUFF_HIGH_JUMP } BuffType;
 
 typedef struct {
     TCHAR username[32];
@@ -44,6 +44,7 @@ typedef struct {
     int fire_timer;
     int special_buffs; // 收集的技能数量
     int bullet_double_stacks; // 子弹数量翻倍叠加层数
+    int high_jump_charges; // 高跳充能次数（按9触发）
 } Player;
 
 typedef struct {

@@ -7,6 +7,7 @@
 #include <windows.h> 
 
 static int key_0_pressed = 0;
+static int key_9_pressed = 0;
 static int menu_left_pressed = 0;
 static int menu_right_pressed = 0;
 static int rhythm_a_prev = 0;  // P1 录音：A 键上一帧状态
@@ -185,6 +186,18 @@ void ProcessInput() {
             key_0_pressed = 1;
         } else {
             key_0_pressed = 0;
+        }
+
+        // 按 9 触发高跳
+        if (GetAsyncKeyState('9') & 0x8000) {
+            if (!key_9_pressed && g_game.player.high_jump_charges > 0) {
+                g_game.player.high_jump_charges--;
+                // 给玩家一个强力向上的速度
+                g_game.player.vy = (g_game.gravity_dir == 1) ? JUMP_FORCE * 2.5f : -JUMP_FORCE * 2.5f;
+            }
+            key_9_pressed = 1;
+        } else {
+            key_9_pressed = 0;
         }
     }
 
