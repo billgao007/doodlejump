@@ -262,76 +262,7 @@ static void DrawGameOver() {
     outtextxy(80, 320, _T("Press SPACE to Restart"));
 }
 
-// ========== 节奏模式：Spirit 角色绘制（使用 Doodle Jump 形象）==========
-static void DrawRhythmSpirit(float cx, float cy, long long current_time) {
-    (void)current_time;
-    int w = 30, h = 30;
-    int x = (int)(cx - w / 2.0f);
-    int y = (int)(cy - h / 2.0f);
-    putimage(x, y, &img_player);
-}
-
-// ========== 节奏模式：音符绘制（菱形 + 光晕）==========
-static void DrawRhythmNote(int cx, int cy, TrackID track, JudgmentType judgment, int hit_flash) {
-    int size = 16;
-
-    // 命中闪烁效果
-    if (hit_flash > 0) {
-        float flash_t = (float)hit_flash / HIT_FLASH_FRAMES;
-        int flash_r = size + (int)(12 * flash_t);
-        int alpha = (int)(180 * flash_t);
-        setfillcolor(RGB(alpha, alpha, 255));
-        solidcircle(cx, cy, flash_r);
-    }
-
-    // 外发光
-    COLORREF glow_color;
-    if (judgment == JUDGMENT_PERFECT)      glow_color = RGB(0, 255, 100);
-    else if (judgment == JUDGMENT_GOOD)    glow_color = RGB(255, 220, 50);
-    else if (judgment == JUDGMENT_MISS)    glow_color = RGB(255, 50, 50);
-    else {
-        // 未判定音符：根据轨道着色
-        glow_color = (track == TRACK_LEFT) ? RGB(100, 180, 255) : RGB(255, 130, 200);
-    }
-
-    // 光晕
-    setfillcolor(glow_color);
-    solidcircle(cx, cy, size + 6);
-    // 内圈亮色
-    int r = GetRValue(glow_color), g = GetGValue(glow_color), b = GetBValue(glow_color);
-    setfillcolor(RGB(min(r + 60, 255), min(g + 60, 255), min(b + 60, 255)));
-    solidcircle(cx, cy, size + 2);
-    // 白色核心
-    setfillcolor(WHITE);
-    solidcircle(cx, cy, size - 4);
-
-    // 菱形边框
-    POINT diamond[4] = {
-        {cx, cy - size},
-        {cx + size, cy},
-        {cx, cy + size},
-        {cx - size, cy}
-    };
-    setlinecolor(RGB(min(r + 40, 255), min(g + 40, 255), min(b + 40, 255)));
-    setlinestyle(PS_SOLID, 2);
-    polygon(diamond, 4);
-
-    // 轨道方向指示三角箭头
-    setfillcolor(WHITE);
-    POINT tri[3];
-    if (track == TRACK_LEFT) {
-        tri[0].x = cx - 6; tri[0].y = cy;
-        tri[1].x = cx + 4; tri[1].y = cy - 5;
-        tri[2].x = cx + 4; tri[2].y = cy + 5;
-    } else {
-        tri[0].x = cx + 6; tri[0].y = cy;
-        tri[1].x = cx - 4; tri[1].y = cy - 5;
-        tri[2].x = cx - 4; tri[2].y = cy + 5;
-    }
-    solidpolygon(tri, 3);
-}
-
-// ========== 节奏模式：绘制得分弹出文字 ==========
+// ========== 节奏模式：绘制打击粒子 ==========
 static void DrawScorePopups() {
     int popup_count;
     const ScorePopup* popups = GetScorePopups(&popup_count);
@@ -394,143 +325,123 @@ static void DrawRhythmParticles() {
     }
 }
 
-// ========== 节奏模式：绘制下落音符轨迹 ==========
-static void DrawNoteTrails(long long current_time) {
-    float fall_speed = FALLING_SPEED * g_game.rhythm_data.fall_speed_mult;
-    RhythmData* rd = &g_game.rhythm_data;
-    long long echo_start = rd->bar_start_time + rd->bar_duration / 2;
-
-    for (int i = 0; i < rd->recorded_count; i++) {
-        RhythmNote* note = &rd->recorded_sequence[i];
-        if (note->is_handled && note->hit_flash_timer <= 0) continue;
-
-        // ECHO / POST_SCORE 阶段：用 echo 目标时间计算
-        long long note_target = echo_start + note->relative_timestamp;
-        float note_y = GetEchoNoteY(note_target, current_time, fall_speed);
-        if (note_y < -100 || note_y > SCREEN_HEIGHT + 100) continue;
-
-        int note_x = (note->track == TRACK_LEFT) ? (int)(SCREEN_WIDTH / 4.0f) : (int)(3.0f * SCREEN_WIDTH / 4.0f);
-
-        // 拖尾效果：在音符上方绘制渐隐虚影
-        int trail_len = 8;
-        for (int t = 1; t <= trail_len; t++) {
-            float trail_y = note_y - t * 6.0f;
-            if (trail_y < -20) break;
-            int alpha = 60 - t * 7;
-            if (alpha < 0) alpha = 0;
-
-            COLORREF tc;
-            if (note->track == TRACK_LEFT) tc = RGB(100, 180, 255);
-            else tc = RGB(255, 130, 200);
-
-            setfillcolor(RGB(
-                min(GetRValue(tc) * alpha / 60, 255),
-                min(GetGValue(tc) * alpha / 60, 255),
-                min(GetBValue(tc) * alpha / 60, 255)
-            ));
-            int tr = 14 - t;
-            if (tr < 2) tr = 2;
-            solidcircle(note_x, (int)trail_y, tr);
-        }
-    }
-}
-
 // ========== 节奏模式：主绘制函数 ==========
 static void DrawRhythm() {
     long long current_time = GetGameTimeMs();
     long long elapsed = current_time - g_game.rhythm_data.bar_start_time;
     float fall_speed = FALLING_SPEED * g_game.rhythm_data.fall_speed_mult;
     int judgment_y = JUDGMENT_Y;
+    RhythmData* rd = &g_game.rhythm_data;
 
-    // ---- 1. 背景：深色渐变 + 动态星点 ----
+    // ---- 1. 背景：跳跃模式蓝白渐变 ----
     for (int y = 0; y < SCREEN_HEIGHT; y++) {
-        int r = 20 + y * 30 / SCREEN_HEIGHT;
-        int g = 15 + y * 35 / SCREEN_HEIGHT;
-        int b = 50 + y * 40 / SCREEN_HEIGHT;
+        int r = 180 + y * 60 / SCREEN_HEIGHT;
+        int g = 210 + y * 40 / SCREEN_HEIGHT;
+        int b = 240 + y * 15 / SCREEN_HEIGHT;
         setfillcolor(RGB(r, g, b));
         solidrectangle(0, y, SCREEN_WIDTH, y);
     }
 
-    // BPM 脉冲背景光
-    float pulse = g_game.rhythm_data.bg_pulse_phase;
-    float pulse_intensity = (sinf(pulse * 6.28318f) + 1.0f) * 0.5f; // 0~1
-    int pulse_alpha = (int)(40 + pulse_intensity * 20);
-    setfillcolor(RGB(pulse_alpha, pulse_alpha / 3, pulse_alpha));
-    solidrectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-
-    // ---- 2. 左右轨道绘制 ----
+    // ---- 2. 左右半区淡色标识 ----
     int left_glow = GetTrackGlow(TRACK_LEFT);
     int right_glow = GetTrackGlow(TRACK_RIGHT);
 
-    // 左轨背景
-    int lg = 60 + left_glow * 8; if (lg > 160) lg = 160;
-    setfillcolor(RGB(30, 40, lg));
+    // 左半区
+    int lg = 220 - left_glow * 5; if (lg < 180) lg = 180;
+    setfillcolor(RGB(lg, lg, 255));
     solidrectangle(0, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT);
-    // 左轨高亮闪烁
     if (left_glow > 0) {
-        setfillcolor(RGB(60, 100, min(220, 140 + left_glow * 6)));
+        setfillcolor(RGB(150, 180, min(255, 200 + left_glow * 4)));
         solidrectangle(0, judgment_y - 30, SCREEN_WIDTH / 2, judgment_y + 30);
     }
 
-    // 右轨背景
-    int rg = 60 + right_glow * 8; if (rg > 160) rg = 160;
-    setfillcolor(RGB(30, rg / 2 + 20, rg));
+    // 右半区
+    int rg = 220 - right_glow * 5; if (rg < 180) rg = 180;
+    setfillcolor(RGB(255, rg, rg));
     solidrectangle(SCREEN_WIDTH / 2, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-    // 右轨高亮闪烁
     if (right_glow > 0) {
-        setfillcolor(RGB(min(220, 140 + right_glow * 6), 60, 100));
+        setfillcolor(RGB(min(255, 200 + right_glow * 4), 150, 180));
         solidrectangle(SCREEN_WIDTH / 2, judgment_y - 30, SCREEN_WIDTH, judgment_y + 30);
     }
 
-    // 轨道分隔线
-    setlinecolor(RGB(100, 100, 180));
+    // 分隔虚线
+    setlinecolor(RGB(180, 180, 220));
     setlinestyle(PS_DASH, 1);
     line(SCREEN_WIDTH / 2, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT);
 
-    // ---- 3. 音符拖尾 ----
-    DrawNoteTrails(current_time);
+    // ---- 3. 判定线 ----
+    setlinecolor(RGB(255, 200, 100));
+    setlinestyle(PS_SOLID, 2);
+    line(0, judgment_y, SCREEN_WIDTH, judgment_y);
 
-    // ---- 4. 下落的音符 ----
+    // ---- 4. 下落的 player（音符） + 弹飞/爆炸动画 ----
     {
-        RhythmData* rd = &g_game.rhythm_data;
         long long echo_start = rd->bar_start_time + rd->bar_duration / 2;
         for (int i = 0; i < rd->recorded_count; i++) {
             RhythmNote* note = &rd->recorded_sequence[i];
-            // 用 echo_start 作为基准计算目标时间
-            long long note_target = echo_start + note->relative_timestamp;
-            float note_y = GetEchoNoteY(note_target, current_time, fall_speed);
 
-            if (note_y > -60 && note_y < SCREEN_HEIGHT + 60) {
-                int note_x = (note->track == TRACK_LEFT) ? (int)(SCREEN_WIDTH / 4.0f) : (int)(3.0f * SCREEN_WIDTH / 4.0f);
-                DrawRhythmNote(note_x, (int)note_y, note->track, note->judgment, note->hit_flash_timer);
+            float note_x, note_y;
+            if (note->bounce_active) {
+                // 弹飞动画：位置由 velocity 驱动
+                note_x = (note->track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
+                note_y = judgment_y; // 碰撞点在判定线
+                // 用计时器偏移模拟弹飞路径
+                float bt = 1.0f - (float)note->bounce_timer / BOUNCE_DURATION;
+                note_x += note->bounce_vx * bt * 8.0f;
+                note_y += note->bounce_vy * bt * 5.0f - 20.0f * bt;
+            } else if (note->exploding) {
+                // 爆炸中：画在判定线位置，由粒子表现爆炸
+                note_x = (note->track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
+                note_y = judgment_y;
+            } else {
+                // 正常下落
+                long long note_target = echo_start + note->relative_timestamp;
+                note_x = (note->track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
+                note_y = GetEchoNoteY(note_target, current_time, fall_speed);
+            }
+
+            if (note_y > -40 && note_y < SCREEN_HEIGHT + 40 && !note->exploding) {
+                int ix = (int)(note_x - 15);
+                int iy = (int)(note_y - 15);
+
+                // 命中闪烁光晕
+                if (note->hit_flash_timer > 0 && !note->bounce_active) {
+                    float ft = (float)note->hit_flash_timer / HIT_FLASH_FRAMES;
+                    int fa = (int)(150 * ft);
+                    COLORREF fc;
+                    if (note->judgment == JUDGMENT_PERFECT) fc = RGB(0, 255, 100);
+                    else if (note->judgment == JUDGMENT_GOOD) fc = RGB(255, 220, 50);
+                    else fc = RGB(255, 50, 50);
+                    setfillcolor(RGB(min(GetRValue(fc), 255), min(GetGValue(fc), 255), min(GetBValue(fc), 255)));
+                    solidcircle((int)note_x, (int)note_y, 22);
+                }
+
+                // 拖尾虚影
+                for (int t = 1; t <= 5; t++) {
+                    float ty = note_y - t * 8.0f;
+                    if (ty < -20) break;
+                    int alpha = 100 - t * 18;
+                    if (alpha < 0) alpha = 0;
+                    // EasyX putimage 不支持透明度，用淡色矩形模拟
+                    setfillcolor(RGB(alpha + 100, alpha + 100, alpha + 100));
+                    solidrectangle(ix - 1, (int)ty - 1, ix + 31, (int)ty + 31);
+                }
+
+                // 绘制 player.png
+                putimage(ix, iy, &img_player);
             }
         }
     }
 
-    // ---- 5. 判定线（带脉冲发光） ----
-    int line_glow = (int)(40 + pulse_intensity * 40);
-    // 外发光
-    setlinecolor(RGB(line_glow, line_glow, 0));
-    setlinestyle(PS_SOLID, 4);
-    line(0, judgment_y, SCREEN_WIDTH, judgment_y);
-    // 内线
-    setlinecolor(RGB(255, 255, 100));
-    setlinestyle(PS_SOLID, 2);
-    line(0, judgment_y, SCREEN_WIDTH, judgment_y);
-    // 判定线两端标记
-    setfillcolor(RGB(255, 255, 0));
-    solidcircle(10, judgment_y, 4);
-    solidcircle(SCREEN_WIDTH - 10, judgment_y, 4);
-
-    // ---- 6. Spirit 角色 ----
-    float spirit_x = GetSpiritX(current_time);
-    float spirit_y = GetSpiritY(current_time);
-    DrawRhythmSpirit(spirit_x, spirit_y, current_time);
-
-    // Spirit 阴影
+    // ---- 5. 板子（platform.png） ----
+    float plat_x = GetPlatformX(current_time);
+    float plat_y = GetPlatformY();
+    int pw = 60, ph = 10;
+    // 板子阴影
     setfillcolor(RGB(0, 0, 0));
-    int shadow_w = 18;
-    fillellipse((int)spirit_x - shadow_w/2, judgment_y - 15, (int)spirit_x + shadow_w/2, judgment_y - 9);
+    fillellipse((int)plat_x - pw/2 + 2, (int)plat_y + 4, (int)plat_x + pw/2 + 2, (int)plat_y + 8);
+    // 板子贴图
+    putimage((int)(plat_x - pw/2), (int)(plat_y - ph/2), &img_platform);
 
     // ---- 7. 打击粒子 ----
     DrawRhythmParticles();

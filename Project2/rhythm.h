@@ -6,9 +6,11 @@
 #define PERFECT_WINDOW 80    // ms
 #define GOOD_WINDOW 150      // ms
 #define FALLING_SPEED 0.25f  // pixels per ms
-#define SPIRIT_LERP_TIME 80  // ms
+#define SPIRIT_LERP_TIME 80  // ms（板子滑动 Lerp 时间）
 #define JUDGMENT_Y 520       // 判定线 Y 坐标
 #define HIT_FLASH_FRAMES 12  // 命中闪烁帧数
+#define BOUNCE_DURATION 30   // 弹飞动画持续帧数
+#define EXPLODE_DURATION 25  // 爆炸动画持续帧数
 
 // 初始化节奏模式
 void InitRhythm();
@@ -19,17 +21,17 @@ void UpdateRhythm(long long current_time);
 // P1 (录音者) 在当前时间点添加一个音符
 void RecordNote(long long current_time, TrackID track);
 
-// P2 (模仿者) 移动 Spirit 到指定轨道（A/D 控制）
-void MoveSpirit(TrackID track);
+// P2 (模仿者) 移动板子到指定轨道（A/D 控制）
+void MovePlatform(TrackID track);
 
-// 自动判定：检测是否有音符到达判定线，根据 Spirit 位置判定
+// 自动判定：板子是否接住下落的 player
 void AutoJudgeNotes(long long current_time);
 
-// 获取 Spirit 的当前 X 坐标（带 Lerp 动画）
-float GetSpiritX(long long current_time);
+// 获取板子当前 X 坐标（带 Lerp 动画）
+float GetPlatformX(long long current_time);
 
-// 获取 Spirit 的当前 Y 坐标（带弹跳动画）
-float GetSpiritY(long long current_time);
+// 获取板子 Y 坐标（固定值）
+float GetPlatformY();
 
 // 获取一个音符在屏幕上的 Y 坐标（通用）
 float GetNoteYPosition(long long note_timestamp, long long current_time, float falling_speed);

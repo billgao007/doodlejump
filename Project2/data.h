@@ -95,8 +95,17 @@ typedef struct {
     TrackID track; // 音符轨道（左/右）
     int is_handled; // P2是否已响应
     JudgmentType judgment; // 判定结果
-    int hit_flash_timer; // 命中闪烁计时（帧数），>0 表示正在播放命中动画
-    int pitch_index; // 音高编号 0-7，同一音符录制和回放触发相同音调
+    int hit_flash_timer; // 命中闪烁计时（帧数）
+    int pitch_index; // 音高编号 0-7
+
+    // 弹飞动画（被 platform 接住后）
+    int bounce_active;
+    float bounce_vx, bounce_vy;
+    int bounce_timer;
+
+    // 爆炸消失动画（Miss 后）
+    int exploding;
+    int explode_timer;
 } RhythmNote;
 
 // 节奏模式：浮动得分弹出文字
@@ -132,15 +141,11 @@ typedef struct {
     RhythmNote recorded_sequence[MAX_RHYTHM_NOTES];
     int recorded_count;
     
-    // P2 (模仿者) 数据
-    float spirit_x; // Spirit 位置（左墙=0，右墙=SCREEN_WIDTH）
-    float spirit_target_x; // Spirit 目标位置
-    long long spirit_lerp_start; // Spirit 跳跃动画起始时间
-    int spirit_lerp_duration; // Spirit 跳跃持续时长（ms）
-    float spirit_y; // Spirit Y 坐标（带弹跳动画）
-    float spirit_vy; // Spirit 垂直速度（弹跳用）
-    float spirit_base_y; // Spirit 基础 Y 坐标（判定线附近）
-    int spirit_bob_timer; // 待机浮动计时器
+    // P2 (模仿者) 数据 — 用板子接住下落的 player
+    float platform_x;           // 板子当前 X 坐标（中心）
+    float platform_target_x;    // 板子目标 X 坐标
+    long long platform_lerp_start; // 板子移动动画起始时间
+    int platform_lerp_duration; // 板子移动持续时长（ms）
 
     int p2_input_handled; // 防抖：P2本小节是否已输入
     long long p2_input_time; // P2 最后输入时间

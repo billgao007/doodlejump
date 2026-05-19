@@ -3,22 +3,19 @@
 #include <math.h>
 #include <string.h>
 
-#define SPIRIT_BOUNCE_TIME 200
 #define POPUP_LIFE 45
-#define PLAYER_SECONDS 5        // 每位玩家 5 秒输入时间
+#define PLAYER_SECONDS 5
 
 // ---- 内部辅助 ----
 
-// 进入下一小节的通用逻辑
 static void AdvanceToNextBar(void) {
     RhythmData* rd = &g_game.rhythm_data;
     rd->bar_index++;
-    // 保留累积分和结算轮次计数
-    int saved_score     = rd->current_score;
-    int saved_perfect   = rd->total_perfect;
-    int saved_good      = rd->total_good;
-    int saved_miss      = rd->total_miss;
-    int saved_settle    = rd->settlement_round_counter;
+    int saved_score   = rd->current_score;
+    int saved_perfect = rd->total_perfect;
+    int saved_good    = rd->total_good;
+    int saved_miss    = rd->total_miss;
+    int saved_settle  = rd->settlement_round_counter;
     InitRhythm();
     rd->current_score   = saved_score;
     rd->total_perfect   = saved_perfect;
@@ -28,9 +25,28 @@ static void AdvanceToNextBar(void) {
     rd->pending_settlement = 0;
 }
 
-// --- 内部辅助函数 ---
+static void SpawnExplosion(float x, float y) {
+    int spawned = 0;
+    for (int i = 0; i < MAX_RHYTHM_PARTICLES && spawned < 20; i++) {
+        if (g_game.rhythm_data.rhythm_particles[i].life <= 0) {
+            float angle = (float)(spawned) / 20.0f * 6.28318f;
+            float speed = 3.0f + (float)(spawned % 5) * 0.8f;
+            g_game.rhythm_data.rhythm_particles[i].x = x;
+            g_game.rhythm_data.rhythm_particles[i].y = y;
+            g_game.rhythm_data.rhythm_particles[i].vx = cosf(angle) * speed;
+            g_game.rhythm_data.rhythm_particles[i].vy = sinf(angle) * speed - 2.0f;
+            g_game.rhythm_data.rhythm_particles[i].life = 25;
+            g_game.rhythm_data.rhythm_particles[i].max_life = 25;
+            g_game.rhythm_data.rhythm_particles[i].r = 255;
+            g_game.rhythm_data.rhythm_particles[i].g = 80 + (spawned % 5) * 20;
+            g_game.rhythm_data.rhythm_particles[i].b = 20;
+            g_game.rhythm_data.rhythm_particles[i].radius = 2.0f + (float)(spawned % 3);
+            spawned++;
+        }
+    }
+}
 
-// 生成一次判定结果（含粒子、弹出文字、连击、音效）
+// 生成一次判定结果（含弹飞/爆炸、粒子、弹出文字、连击、音效）
 static void ApplyJudgment(RhythmNote* note, JudgmentType judgment, float note_x, float note_y, long long current_time) {
     note->judgment = judgment;
     note->is_handled = 1;
@@ -41,34 +57,47 @@ static void ApplyJudgment(RhythmNote* note, JudgmentType judgment, float note_x,
     if (judgment == JUDGMENT_PERFECT) {
         g_game.rhythm_data.total_perfect++;
         g_game.rhythm_data.combo++;
-        score_add = 100 + g_game.rhythm_data.combo * 5; // 连击加分
+        score_add = 100 + g_game.rhythm_data.combo * 5;
         g_game.rhythm_data.current_score += score_add;
-
-        // Perfect 波纹特效
         g_game.rhythm_data.perfect_ripple_active = 1;
         g_game.rhythm_data.perfect_ripple_start = current_time;
         g_game.rhythm_data.perfect_ripple_x = note_x;
+
+        // 弹飞：接住的 player 沿轨道方向快速弹走
+        note->bounce_active = 1;
+        note->bounce_timer = BOUNCE_DURATION;
+        note->bounce_vx = (note->track == TRACK_LEFT) ? -9.0f : 9.0f;
+        note->bounce_vy = -7.0f;
     } else if (judgment == JUDGMENT_GOOD) {
         g_game.rhythm_data.total_good++;
         g_game.rhythm_data.combo++;
         score_add = 50 + g_game.rhythm_data.combo * 2;
         g_game.rhythm_data.current_score += score_add;
+
+        note->bounce_active = 1;
+        note->bounce_timer = BOUNCE_DURATION;
+        note->bounce_vx = (note->track == TRACK_LEFT) ? -6.0f : 6.0f;
+        note->bounce_vy = -5.0f;
     } else {
         g_game.rhythm_data.total_miss++;
-        g_game.rhythm_data.combo = 0; // 断连
+        g_game.rhythm_data.combo = 0;
+
+        // Miss：爆炸消失
+        note->exploding = 1;
+        note->explode_timer = EXPLODE_DURATION;
+        SpawnExplosion(note_x, note_y);
     }
 
     if (g_game.rhythm_data.combo > g_game.rhythm_data.max_combo) {
         g_game.rhythm_data.max_combo = g_game.rhythm_data.combo;
     }
 
-    // 播放判定音效 + 音符原始音调
     PlayNoteBeep(note->pitch_index);
     if (judgment == JUDGMENT_PERFECT)      PlayEffect(SOUND_PERFECT);
     else if (judgment == JUDGMENT_GOOD)    PlayEffect(SOUND_GOOD);
     else                                   PlayEffect(SOUND_MISS);
 
-    // 生成浮动得分弹出文字
+    // 浮动得分弹出文字
     for (int i = 0; i < MAX_SCORE_POPUPS; i++) {
         if (g_game.rhythm_data.score_popups[i].life <= 0) {
             g_game.rhythm_data.score_popups[i].x = note_x;
@@ -82,39 +111,28 @@ static void ApplyJudgment(RhythmNote* note, JudgmentType judgment, float note_x,
         }
     }
 
-    // 生成打击粒子
-    int particle_count = (judgment == JUDGMENT_PERFECT) ? 16 : (judgment == JUDGMENT_GOOD ? 8 : 4);
-    int spawned = 0;
-    for (int i = 0; i < MAX_RHYTHM_PARTICLES && spawned < particle_count; i++) {
-        if (g_game.rhythm_data.rhythm_particles[i].life <= 0) {
-            float angle = (float)(spawned) / particle_count * 6.28318f;
-            float speed = (judgment == JUDGMENT_PERFECT) ? 4.0f : 2.5f;
-            g_game.rhythm_data.rhythm_particles[i].x = note_x;
-            g_game.rhythm_data.rhythm_particles[i].y = note_y;
-            g_game.rhythm_data.rhythm_particles[i].vx = cosf(angle) * speed;
-            g_game.rhythm_data.rhythm_particles[i].vy = sinf(angle) * speed - 1.5f;
-            g_game.rhythm_data.rhythm_particles[i].life = 20;
-            g_game.rhythm_data.rhythm_particles[i].max_life = 20;
-            if (judgment == JUDGMENT_PERFECT) {
-                g_game.rhythm_data.rhythm_particles[i].r = 0;
-                g_game.rhythm_data.rhythm_particles[i].g = 255;
-                g_game.rhythm_data.rhythm_particles[i].b = 100;
-            } else if (judgment == JUDGMENT_GOOD) {
-                g_game.rhythm_data.rhythm_particles[i].r = 255;
-                g_game.rhythm_data.rhythm_particles[i].g = 220;
-                g_game.rhythm_data.rhythm_particles[i].b = 50;
-            } else {
-                g_game.rhythm_data.rhythm_particles[i].r = 255;
-                g_game.rhythm_data.rhythm_particles[i].g = 60;
-                g_game.rhythm_data.rhythm_particles[i].b = 60;
+    // 命中粒子（Perfect/Good 才有，Miss 已用 SpawnExplosion）
+    if (judgment != JUDGMENT_MISS) {
+        int pc = (judgment == JUDGMENT_PERFECT) ? 12 : 6;
+        int sp = 0;
+        for (int i = 0; i < MAX_RHYTHM_PARTICLES && sp < pc; i++) {
+            if (g_game.rhythm_data.rhythm_particles[i].life <= 0) {
+                float a = (float)(sp) / pc * 6.28318f;
+                float s = (judgment == JUDGMENT_PERFECT) ? 3.5f : 2.0f;
+                g_game.rhythm_data.rhythm_particles[i].x = note_x;
+                g_game.rhythm_data.rhythm_particles[i].y = note_y;
+                g_game.rhythm_data.rhythm_particles[i].vx = cosf(a) * s;
+                g_game.rhythm_data.rhythm_particles[i].vy = sinf(a) * s - 1.0f;
+                g_game.rhythm_data.rhythm_particles[i].life = 18;
+                g_game.rhythm_data.rhythm_particles[i].max_life = 18;
+                g_game.rhythm_data.rhythm_particles[i].r = (judgment == JUDGMENT_PERFECT) ? 0 : 255;
+                g_game.rhythm_data.rhythm_particles[i].g = (judgment == JUDGMENT_PERFECT) ? 255 : 220;
+                g_game.rhythm_data.rhythm_particles[i].b = (judgment == JUDGMENT_PERFECT) ? 100 : 50;
+                g_game.rhythm_data.rhythm_particles[i].radius = 2.5f;
+                sp++;
             }
-            g_game.rhythm_data.rhythm_particles[i].radius = 2.5f;
-            spawned++;
         }
     }
-
-    // Spirit 弹跳动画
-    g_game.rhythm_data.spirit_vy = -8.0f;
 }
 
 // --- 公开接口 ---
@@ -126,31 +144,20 @@ void InitRhythm() {
     rd->sub_state = RHYTHM_PRE_START;
     rd->bar_index = 0;
     rd->bpm = 120;
-    // 每位玩家 5 秒，小节总时长 = 10 秒
     rd->bar_duration = (long long)PLAYER_SECONDS * 2 * 1000LL;
     rd->bar_start_time = GetGameTimeMs();
     
-    rd->spirit_x = (float)SCREEN_WIDTH / 2.0f; // 初始居中
-    rd->spirit_target_x = rd->spirit_x;
-    rd->spirit_lerp_duration = SPIRIT_LERP_TIME;
-    rd->spirit_base_y = (float)JUDGMENT_Y - 30.0f;
-    rd->spirit_y = rd->spirit_base_y;
-    rd->spirit_vy = 0.0f;
+    // 板子初始居中
+    rd->platform_x = (float)SCREEN_WIDTH / 2.0f;
+    rd->platform_target_x = rd->platform_x;
+    rd->platform_lerp_duration = SPIRIT_LERP_TIME;
 
     rd->perfect_ripple_duration = 200;
     rd->fall_speed_mult = 1.0f;
     rd->bg_pulse_phase = 0.0f;
 
-    // 结算系统：保留累积分和计数器
-    // settlement_round_counter 和 pending_settlement 由调用方管理
-
-    // 初始化弹出文字状态
-    for (int i = 0; i < MAX_SCORE_POPUPS; i++) {
-        rd->score_popups[i].life = 0;
-    }
-    for (int i = 0; i < MAX_RHYTHM_PARTICLES; i++) {
-        rd->rhythm_particles[i].life = 0;
-    }
+    for (int i = 0; i < MAX_SCORE_POPUPS; i++)  rd->score_popups[i].life = 0;
+    for (int i = 0; i < MAX_RHYTHM_PARTICLES; i++) rd->rhythm_particles[i].life = 0;
 }
 
 void UpdateRhythm(long long current_time) {
@@ -191,14 +198,22 @@ void UpdateRhythm(long long current_time) {
         if (rd->track_glow_timer[t] > 0) rd->track_glow_timer[t]--;
     }
 
-    // 更新 Spirit 弹跳
-    rd->spirit_y += rd->spirit_vy;
-    rd->spirit_vy += 0.5f;
-    if (rd->spirit_y >= rd->spirit_base_y) {
-        rd->spirit_y = rd->spirit_base_y;
-        rd->spirit_vy = 0.0f;
+    // 更新弹飞 / 爆炸动画计时
+    for (int i = 0; i < rd->recorded_count; i++) {
+        RhythmNote* note = &rd->recorded_sequence[i];
+        if (note->bounce_active) {
+            note->bounce_timer--;
+            note->bounce_vx += (note->bounce_vx > 0 ? -0.3f : 0.3f); // 横向减速
+            note->bounce_vy += 0.4f; // 重力
+            if (note->bounce_timer <= 0) note->bounce_active = 0;
+        }
+        if (note->exploding) {
+            note->explode_timer--;
+            if (note->explode_timer <= 0) note->exploding = 0;
+        }
+        if (note->hit_flash_timer > 0)
+            note->hit_flash_timer--;
     }
-    rd->spirit_bob_timer = (rd->spirit_bob_timer + 1) % 120;
     
     // 更新 Perfect 波纹
     if (rd->perfect_ripple_active) {
@@ -284,79 +299,73 @@ void RecordNote(long long current_time, TrackID track) {
     }
 }
 
-void MoveSpirit(TrackID track) {
+void MovePlatform(TrackID track) {
     RhythmData* rd = &g_game.rhythm_data;
-    // 防抖
     long long now = GetGameTimeMs();
     if (now - rd->p2_input_time < 60) return;
     rd->p2_input_time = now;
 
-    rd->spirit_target_x = (track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
-    rd->spirit_lerp_start = now;
-    // 记录当前位置用于 Lerp 起点
-    rd->spirit_x = GetSpiritX(now);
+    rd->platform_target_x = (track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
+    rd->platform_lerp_start = now;
+    rd->platform_x = GetPlatformX(now);
 }
 
 void AutoJudgeNotes(long long current_time) {
     RhythmData* rd = &g_game.rhythm_data;
-    float spirit_cx = GetSpiritX(current_time);
+    float plat_cx = GetPlatformX(current_time);
+    float plat_y = GetPlatformY();
     float fall_speed = FALLING_SPEED * rd->fall_speed_mult;
-    // ECHO 阶段起始时间：音符从此刻开始下落
     long long echo_start = rd->bar_start_time + rd->bar_duration / 2;
+
+    // 板子半宽 30px，player 半径 15px → 碰撞检测范围 ≈ 45px
+    float catch_range = 45.0f;
 
     for (int i = 0; i < rd->recorded_count; i++) {
         RhythmNote* note = &rd->recorded_sequence[i];
         if (note->is_handled) continue;
 
-        // 音符目标命中时间 = echo_start + relative_timestamp
         long long note_target = echo_start + note->relative_timestamp;
         float note_y = GetEchoNoteY(note_target, current_time, fall_speed);
+        float note_x = (note->track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
 
-        // 音符到达判定线附近（±30px 范围内自动判定）
-        if (note_y >= JUDGMENT_Y - 30.0f && note_y <= JUDGMENT_Y + 30.0f) {
-            float note_x = (note->track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
-            
-            // 检查 Spirit 是否在正确轨道
-            float dist_to_note = fabsf(spirit_cx - note_x);
-            int on_correct_track = (dist_to_note < 60.0f);
+        // 水平碰撞检测：板子 X 范围与 player X 重叠
+        float dist_x = fabsf(plat_cx - note_x);
+        // 垂直碰撞检测：player 到达板子高度附近
+        float dist_y = fabsf(note_y - plat_y);
 
-            if (on_correct_track) {
-                long long timing_error = current_time - note_target;
-                if (timing_error < 0) timing_error = -timing_error;
+        if (dist_x < catch_range && dist_y < 36.0f) {
+            // 碰撞到了！只判这一个音符（单次按键单判 — 最近的未处理音符）
+            long long timing_error = current_time - note_target;
+            if (timing_error < 0) timing_error = -timing_error;
 
-                if (timing_error < PERFECT_WINDOW) {
-                    ApplyJudgment(note, JUDGMENT_PERFECT, note_x, note_y, current_time);
-                    rd->track_glow_timer[note->track] = 20;
-                } else if (timing_error < GOOD_WINDOW) {
-                    ApplyJudgment(note, JUDGMENT_GOOD, note_x, note_y, current_time);
-                    rd->track_glow_timer[note->track] = 12;
-                } else {
-                    ApplyJudgment(note, JUDGMENT_MISS, note_x, note_y, current_time);
-                }
+            if (timing_error < PERFECT_WINDOW) {
+                ApplyJudgment(note, JUDGMENT_PERFECT, note_x, note_y, current_time);
+                rd->track_glow_timer[note->track] = 20;
+            } else if (timing_error < GOOD_WINDOW) {
+                ApplyJudgment(note, JUDGMENT_GOOD, note_x, note_y, current_time);
+                rd->track_glow_timer[note->track] = 12;
+            } else {
+                ApplyJudgment(note, JUDGMENT_MISS, note_x, note_y, current_time);
             }
-            // 不在正确轨道 → 等超时 Miss 逻辑处理
+            // 只判一个就退出，防止一次碰撞判定多个音符
+            break;
         }
     }
 }
 
-float GetSpiritX(long long current_time) {
+float GetPlatformX(long long current_time) {
     RhythmData* rd = &g_game.rhythm_data;
-    long long elapsed = current_time - rd->spirit_lerp_start;
-    if (elapsed >= rd->spirit_lerp_duration) {
-        return rd->spirit_target_x;
+    long long elapsed = current_time - rd->platform_lerp_start;
+    if (elapsed >= rd->platform_lerp_duration) {
+        return rd->platform_target_x;
     }
-    float t = (float)elapsed / rd->spirit_lerp_duration;
-    // ease-out 缓动
-    float eased = 1.0f - (1.0f - t) * (1.0f - t);
-    return rd->spirit_x + (rd->spirit_target_x - rd->spirit_x) * eased;
+    float t = (float)elapsed / rd->platform_lerp_duration;
+    float eased = 1.0f - (1.0f - t) * (1.0f - t); // ease-out
+    return rd->platform_x + (rd->platform_target_x - rd->platform_x) * eased;
 }
 
-float GetSpiritY(long long current_time) {
-    (void)current_time;
-    RhythmData* rd = &g_game.rhythm_data;
-    // 弹跳 + 待机浮动
-    float bob = sinf(rd->spirit_bob_timer * 0.1047f) * 3.0f; // ±3px 浮动
-    return rd->spirit_y + bob;
+float GetPlatformY() {
+    return (float)JUDGMENT_Y; // 板子固定在判定线高度
 }
 
 float GetNoteYPosition(long long note_timestamp, long long current_time, float falling_speed) {
@@ -418,6 +427,8 @@ void ResetRhythm() {
         rd->recorded_sequence[i].is_handled = 0;
         rd->recorded_sequence[i].judgment = JUDGMENT_NONE;
         rd->recorded_sequence[i].hit_flash_timer = 0;
+        rd->recorded_sequence[i].bounce_active = 0;
+        rd->recorded_sequence[i].exploding = 0;
     }
     for (int i = 0; i < MAX_SCORE_POPUPS; i++) {
         rd->score_popups[i].life = 0;

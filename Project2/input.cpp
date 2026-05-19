@@ -197,13 +197,13 @@ void ProcessInput() {
             }
         }
 
-        // P2 (回放阶段): A / 左箭头 = 移动到左轨道接音符，D / 右箭头 = 移动到右轨道
+        // P2 (回放阶段): A / 左箭头 = 移动板子到左轨，D / 右箭头 = 移动板子到右轨
         if (g_game.rhythm_data.sub_state == RHYTHM_PHASE_ECHO) {
             if (GetAsyncKeyState('A') & 0x8000 || GetAsyncKeyState(VK_LEFT) & 0x8000) {
-                MoveSpirit(TRACK_LEFT);
+                MovePlatform(TRACK_LEFT);
             }
             if (GetAsyncKeyState('D') & 0x8000 || GetAsyncKeyState(VK_RIGHT) & 0x8000) {
-                MoveSpirit(TRACK_RIGHT);
+                MovePlatform(TRACK_RIGHT);
             }
         }
 
