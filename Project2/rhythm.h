@@ -24,6 +24,9 @@ void RecordNote(long long current_time, TrackID track);
 // P2 (模仿者) 移动板子到指定轨道（A/D 控制）
 void MovePlatform(TrackID track);
 
+// P2 松键后板子自动回到中央
+void ReleasePlatform(long long current_time);
+
 // 自动判定：板子是否接住下落的 player
 void AutoJudgeNotes(long long current_time);
 

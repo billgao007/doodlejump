@@ -63,11 +63,11 @@ static void ApplyJudgment(RhythmNote* note, JudgmentType judgment, float note_x,
         g_game.rhythm_data.perfect_ripple_start = current_time;
         g_game.rhythm_data.perfect_ripple_x = note_x;
 
-        // 弹飞：接住的 player 沿轨道方向快速弹走
+        // 向上弹跳（落在板子上方）
         note->bounce_active = 1;
         note->bounce_timer = BOUNCE_DURATION;
-        note->bounce_vx = (note->track == TRACK_LEFT) ? -9.0f : 9.0f;
-        note->bounce_vy = -7.0f;
+        note->bounce_vx = (note->track == TRACK_LEFT) ? -2.5f : 2.5f; // 轻微横向偏移
+        note->bounce_vy = -14.0f;  // 强力向上弹起
     } else if (judgment == JUDGMENT_GOOD) {
         g_game.rhythm_data.total_good++;
         g_game.rhythm_data.combo++;
@@ -76,8 +76,8 @@ static void ApplyJudgment(RhythmNote* note, JudgmentType judgment, float note_x,
 
         note->bounce_active = 1;
         note->bounce_timer = BOUNCE_DURATION;
-        note->bounce_vx = (note->track == TRACK_LEFT) ? -6.0f : 6.0f;
-        note->bounce_vy = -5.0f;
+        note->bounce_vx = (note->track == TRACK_LEFT) ? -1.8f : 1.8f;
+        note->bounce_vy = -10.0f;
     } else {
         g_game.rhythm_data.total_miss++;
         g_game.rhythm_data.combo = 0;
@@ -97,12 +97,12 @@ static void ApplyJudgment(RhythmNote* note, JudgmentType judgment, float note_x,
     else if (judgment == JUDGMENT_GOOD)    PlayEffect(SOUND_GOOD);
     else                                   PlayEffect(SOUND_MISS);
 
-    // 浮动得分弹出文字
+    // 浮动得分弹出文字 — 屏幕中央偏上
     for (int i = 0; i < MAX_SCORE_POPUPS; i++) {
         if (g_game.rhythm_data.score_popups[i].life <= 0) {
-            g_game.rhythm_data.score_popups[i].x = note_x;
-            g_game.rhythm_data.score_popups[i].y = note_y - 20;
-            g_game.rhythm_data.score_popups[i].vy = -2.5f;
+            g_game.rhythm_data.score_popups[i].x = (float)SCREEN_WIDTH / 2.0f;
+            g_game.rhythm_data.score_popups[i].y = 100.0f; // 屏幕上方
+            g_game.rhythm_data.score_popups[i].vy = -1.2f;  // 缓慢上浮
             g_game.rhythm_data.score_popups[i].life = POPUP_LIFE;
             g_game.rhythm_data.score_popups[i].max_life = POPUP_LIFE;
             g_game.rhythm_data.score_popups[i].type = judgment;
@@ -203,8 +203,7 @@ void UpdateRhythm(long long current_time) {
         RhythmNote* note = &rd->recorded_sequence[i];
         if (note->bounce_active) {
             note->bounce_timer--;
-            note->bounce_vx += (note->bounce_vx > 0 ? -0.3f : 0.3f); // 横向减速
-            note->bounce_vy += 0.4f; // 重力
+            note->bounce_vy += 0.55f; // 重力加速下落
             if (note->bounce_timer <= 0) note->bounce_active = 0;
         }
         if (note->exploding) {
@@ -308,6 +307,16 @@ void MovePlatform(TrackID track) {
     rd->platform_target_x = (track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
     rd->platform_lerp_start = now;
     rd->platform_x = GetPlatformX(now);
+}
+
+void ReleasePlatform(long long current_time) {
+    RhythmData* rd = &g_game.rhythm_data;
+    // 只在板子不在中央时才回中，避免重复触发
+    float center = (float)SCREEN_WIDTH / 2.0f;
+    if (fabsf(rd->platform_target_x - center) < 1.0f) return;
+    rd->platform_target_x = center;
+    rd->platform_lerp_start = current_time;
+    rd->platform_x = GetPlatformX(current_time);
 }
 
 void AutoJudgeNotes(long long current_time) {

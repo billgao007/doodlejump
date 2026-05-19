@@ -267,7 +267,6 @@ static void DrawScorePopups() {
     int popup_count;
     const ScorePopup* popups = GetScorePopups(&popup_count);
 
-    // 文字透明背景
     setbkmode(TRANSPARENT);
 
     for (int i = 0; i < popup_count; i++) {
@@ -275,41 +274,42 @@ static void DrawScorePopups() {
 
         float t = (float)popups[i].life / popups[i].max_life;
         int alpha = (int)(255 * t);
-        int font_size = 18 + (int)(8 * t); // 逐渐缩小
+        int font_size = 28 + (int)(14 * t); // 大字体 28→42
 
         const TCHAR* text;
         COLORREF color;
         if (popups[i].type == JUDGMENT_PERFECT) {
             text = _T("PERFECT!");
-            color = RGB(0, min(alpha + 60, 255), min(alpha, 200));
+            color = RGB(min(alpha + 40, 255), min(alpha + 80, 255), min(alpha / 2, 200));
         } else if (popups[i].type == JUDGMENT_GOOD) {
             text = _T("GOOD");
-            color = RGB(min(alpha + 60, 255), min(alpha + 100, 255), 0);
+            color = RGB(min(alpha + 100, 255), min(alpha + 60, 255), 0);
         } else {
             text = _T("MISS");
-            color = RGB(min(alpha + 80, 255), min(alpha / 2, 120), min(alpha / 2, 120));
+            color = RGB(min(alpha + 80, 255), min(alpha / 3, 100), min(alpha / 3, 100));
         }
 
         settextcolor(color);
         settextstyle(font_size, 0, _T("Consolas"));
-        int tx = (int)(popups[i].x - (int)textwidth(text) / 2);
-        int ty = (int)popups[i].y;
+
+        // 居中偏上显示（X 屏幕正中，Y 初始在 120px，缓慢上浮）
+        int tx = SCREEN_WIDTH / 2 - (int)textwidth(text) / 2;
+        int ty = (int)popups[i].y; // y 由 ScorePopup 管理（初始约 100），缓慢上浮
         outtextxy(tx, ty, text);
 
-        // 如果有连击，显示在下方
+        // 连击显示在下方
         if (popups[i].combo > 1 && popups[i].type != JUDGMENT_MISS) {
             TCHAR combo_str[32];
             _stprintf_s(combo_str, 32, _T("%d combo!"), popups[i].combo);
             settextcolor(RGB(min(alpha + 50, 255), min(alpha + 100, 255), min(alpha + 200, 255)));
-            settextstyle(font_size - 4, 0, _T("Consolas"));
-            int cx = (int)(popups[i].x - (int)textwidth(combo_str) / 2);
-            outtextxy(cx, ty + font_size + 2, combo_str);
+            settextstyle(font_size - 8, 0, _T("Consolas"));
+            int cx = SCREEN_WIDTH / 2 - (int)textwidth(combo_str) / 2;
+            outtextxy(cx, ty + font_size + 4, combo_str);
         }
 
-        settextstyle(18, 0, _T("Consolas")); // reset
+        settextstyle(16, 0, _T("Consolas")); // reset
     }
 
-    // 恢复默认背景模式
     setbkmode(OPAQUE);
 }
 
@@ -388,13 +388,12 @@ static void DrawRhythm() {
 
             float note_x, note_y;
             if (note->bounce_active) {
-                // 弹飞动画：位置由 velocity 驱动
+                // 向上弹跳动画：player 从板子上方弹起，受重力回落
                 note_x = (note->track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
-                note_y = judgment_y; // 碰撞点在判定线
-                // 用计时器偏移模拟弹飞路径
-                float bt = 1.0f - (float)note->bounce_timer / BOUNCE_DURATION;
-                note_x += note->bounce_vx * bt * 8.0f;
-                note_y += note->bounce_vy * bt * 5.0f - 20.0f * bt;
+                // 用 velocity 积分模拟抛物线
+                float bt = (float)(BOUNCE_DURATION - note->bounce_timer) / BOUNCE_DURATION;
+                note_x = note_x + note->bounce_vx * bt * 6.0f;
+                note_y = judgment_y + note->bounce_vy * bt * 4.0f; // 初始向上
             } else if (note->exploding) {
                 // 爆炸中：画在判定线位置，由粒子表现爆炸
                 note_x = (note->track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);

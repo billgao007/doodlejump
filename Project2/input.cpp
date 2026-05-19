@@ -210,13 +210,16 @@ void ProcessInput() {
             rhythm_d_prev = d_now;
         }
 
-        // P2 (回放阶段): A / 左箭头 = 移动板子到左轨，D / 右箭头 = 移动板子到右轨
+        // P2 (回放阶段): A/← = 板子去左轨，D/→ = 板子去右轨，松键回中
         if (g_game.rhythm_data.sub_state == RHYTHM_PHASE_ECHO) {
-            if (GetAsyncKeyState('A') & 0x8000 || GetAsyncKeyState(VK_LEFT) & 0x8000) {
+            int a_down = (GetAsyncKeyState('A') & 0x8000) || (GetAsyncKeyState(VK_LEFT) & 0x8000);
+            int d_down = (GetAsyncKeyState('D') & 0x8000) || (GetAsyncKeyState(VK_RIGHT) & 0x8000);
+            if (a_down) {
                 MovePlatform(TRACK_LEFT);
-            }
-            if (GetAsyncKeyState('D') & 0x8000 || GetAsyncKeyState(VK_RIGHT) & 0x8000) {
+            } else if (d_down) {
                 MovePlatform(TRACK_RIGHT);
+            } else {
+                ReleasePlatform(GetGameTimeMs());
             }
         }
 
