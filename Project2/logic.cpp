@@ -647,8 +647,9 @@ static void DoLogicStep() {
     // 死亡判定
     if (b->hp <= 0) {
         if (g_game.endless_mode) {
-            // 无尽模式：Boss 华丽复活
+            // 无尽模式：Boss 华丽复活，玩家回满血量
             RespawnBoss();
+            g_game.player.hp = g_game.player.max_hp;
         } else {
             // 普通模式：进入胜利界面
             if (g_game.score > g_game.current_user.max_score) {

@@ -270,9 +270,16 @@ static void DrawGame() {
         g_game.player.base_damage, g_game.player.dmg_mult, g_game.player.special_buffs, g_game.player.high_jump_charges);
     outtextxy(120, SCREEN_HEIGHT - 20, textBuf);
 
-    // 无尽模式专属 HUD
+    // 无尽模式专属 HUD（深色底栏保证可读性）
     if (g_game.endless_mode) {
-        settextcolor(RGB(255, 215, 0)); settextstyle(14, 0, _T("Consolas"));
+        // 半透明深色底栏
+        setfillcolor(RGB(20, 20, 40));
+        solidrectangle(0, 18, SCREEN_WIDTH, 38);
+        setfillcolor(RGB(40, 40, 70));
+        solidrectangle(2, 20, SCREEN_WIDTH - 2, 36);
+
+        setbkmode(TRANSPARENT);
+        settextcolor(RGB(100, 255, 180)); settextstyle(14, 0, _T("Consolas"));
         TCHAR endless_str[64];
         _stprintf_s(endless_str, 64, _T("Round: %d  |  HP: x%d  |  Dmg Lv: %d"),
             g_game.boss_respawn_count + 1,
@@ -282,12 +289,13 @@ static void DrawGame() {
 
         // 伤害翻倍进度条
         int progress = (g_game.score % 500) * 100 / 500;
-        setfillcolor(RGB(60, 60, 60));
-        solidrectangle(SCREEN_WIDTH - 110, 5, SCREEN_WIDTH - 10, 14);
-        setfillcolor(RGB(255, 200, 0));
-        solidrectangle(SCREEN_WIDTH - 110, 5, SCREEN_WIDTH - 110 + progress, 14);
-        settextcolor(WHITE); settextstyle(10, 0, _T("Consolas"));
-        outtextxy(SCREEN_WIDTH - 108, 5, _T("NEXT DMG x2"));
+        setfillcolor(RGB(30, 30, 30));
+        solidrectangle(SCREEN_WIDTH - 112, 7, SCREEN_WIDTH - 8, 16);
+        setfillcolor(RGB(255, 180, 30));
+        solidrectangle(SCREEN_WIDTH - 110, 7, SCREEN_WIDTH - 110 + progress, 16);
+        settextcolor(RGB(220, 220, 220)); settextstyle(10, 0, _T("Consolas"));
+        outtextxy(SCREEN_WIDTH - 108, 8, _T("NEXT DMG x2"));
+        setbkmode(OPAQUE);
     }
 
     if (g_game.buff_hint_timer > 0 && g_game.buff_hint[0] != '\0') {

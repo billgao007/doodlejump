@@ -175,7 +175,8 @@ void ProcessInput() {
             g_game.endless_mode = 1;
             g_game.boss_respawn_count = 0;
             g_game.damage_bonus_level = 0;
-            g_game.next_damage_bonus_score = 500;
+            // 下一档伤害翻倍基于当前分数，避免继承的分数瞬间触发多次翻倍
+            g_game.next_damage_bonus_score = g_game.score + 500;
             g_game.boss_respawn_effect_timer = 2 * FPS;
             // Boss 复活并继续游戏
             RespawnBoss();
