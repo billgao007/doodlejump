@@ -21,6 +21,9 @@ static int ClampColor(int value) {
     return value;
 }
 
+// 前置声明
+static void DrawBossRespawnEffect();
+
 static void DrawLaserBeam(const Boss* b) {
     int x = (int)b->laser_x;
     int y = (int)(b->y + b->height);
@@ -359,9 +362,9 @@ static void DrawBossRespawnEffect() {
     if (g_game.boss_respawn_effect_timer <= 0) return;
 
     Boss* b = &g_game.boss;
-    float cx = b->x + b->width / 2;
-    float cy = b->y + b->height / 2;
-    float t = 1.0f - (float)g_game.boss_respawn_effect_timer / (2.0f * FPS); // 0 → 1
+    float cx = b->x + b->width / 2.0f;
+    float cy = b->y + b->height / 2.0f;
+    float t = 1.0f - (float)g_game.boss_respawn_effect_timer / (2.0f * (float)FPS); // 0 → 1
     long long tick = GetGameTimeMs();
 
     // 多层扩散光环

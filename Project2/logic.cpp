@@ -546,7 +546,7 @@ static void DoLogicStep() {
             b->spread_warning_time--;
             if (b->spread_warning_time == 0) {
                 // 预警结束，发射第一波
-                FireBossSpread(b->x + b->width / 2, b->y);
+                FireBossSpread(b->x + b->width / 2.0f, b->y);
                 b->spread_wave_fired = 1;
                 if (b->phase == 2) {
                     // 二阶段：延迟后再发射第二波
@@ -556,7 +556,7 @@ static void DoLogicStep() {
         } else if (b->spread_fire_timer > 0) {
             b->spread_fire_timer--;
             if (b->spread_fire_timer == 0 && b->spread_wave_fired < 2) {
-                FireBossSpread(b->x + b->width / 2, b->y);
+                FireBossSpread(b->x + b->width / 2.0f, b->y);
                 b->spread_wave_fired = 2;
             }
         }
@@ -564,12 +564,12 @@ static void DoLogicStep() {
         else if (b->laser_warning_time > 0) {
             b->laser_warning_time--;
             // 激光源实时跟随 Boss 移动
-            b->laser_x = b->x + b->width / 2;
+            b->laser_x = b->x + b->width / 2.0f;
             if (b->laser_warning_time == 0) b->laser_active_time = 30; // 激光激活 0.5 秒
         } else if (b->laser_active_time > 0) {
             b->laser_active_time--;
             // 激光源实时跟随 Boss 移动
-            b->laser_x = b->x + b->width / 2;
+            b->laser_x = b->x + b->width / 2.0f;
             // 判定激光伤害
             if (p->x > b->laser_x - 15 && p->x < b->laser_x + 15) {
                 int laser_dmg = (int)(1.0f * GetBossSkillDmgScale());
@@ -590,7 +590,7 @@ static void DoLogicStep() {
                 if (skill_roll == 0) {
                     // 技能1：瞄准激光
                     b->laser_warning_time = 90; // 1.5秒警告
-                    b->laser_x = b->x + b->width / 2;
+                    b->laser_x = b->x + b->width / 2.0f;
                 } else if (skill_roll == 1) {
                     // 技能2：改变随机平台
                     int idx = GetRandomInt(0, PLATFORM_COUNT - 1);
