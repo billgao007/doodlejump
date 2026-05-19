@@ -12,7 +12,7 @@ static int menu_right_pressed = 0;
 
 
 static bool GetCustomInput(const TCHAR* title, const TCHAR* prompt, TCHAR* buf, int maxLen, bool isPwd) {
-    int len = _tcslen(buf);
+    int len = (int)_tcslen(buf);
     ExMessage msg;
     
     

@@ -394,7 +394,7 @@ static void DrawScorePopups() {
 
         settextcolor(color);
         settextstyle(font_size, 0, _T("Consolas"));
-        int tx = (int)(popups[i].x - textwidth(text) / 2);
+        int tx = (int)(popups[i].x - (int)textwidth(text) / 2);
         int ty = (int)popups[i].y;
         outtextxy(tx, ty, text);
 
@@ -404,7 +404,7 @@ static void DrawScorePopups() {
             _stprintf_s(combo_str, 32, _T("%d combo!"), popups[i].combo);
             settextcolor(RGB(min(alpha + 50, 255), min(alpha + 100, 255), min(alpha + 200, 255)));
             settextstyle(font_size - 4, 0, _T("Consolas"));
-            int cx = (int)(popups[i].x - textwidth(combo_str) / 2);
+            int cx = (int)(popups[i].x - (int)textwidth(combo_str) / 2);
             outtextxy(cx, ty + font_size + 2, combo_str);
         }
 
@@ -599,8 +599,8 @@ static void DrawRhythm() {
     settextstyle(16, 0, _T("Consolas"));
 
     // 状态文本
-    const TCHAR* phase_text;
-    COLORREF phase_color;
+    const TCHAR* phase_text = _T("");
+    COLORREF phase_color = RGB(255, 255, 255);
     switch (g_game.rhythm_data.sub_state) {
     case RHYTHM_PRE_START:
         phase_text = _T("GET READY..."); phase_color = RGB(255, 255, 100);
@@ -623,7 +623,7 @@ static void DrawRhythm() {
     settextstyle(20, 0, _T("Consolas"));
     TCHAR score_str[32];
     _stprintf_s(score_str, 32, _T("%d"), g_game.rhythm_data.current_score);
-    int score_w = textwidth(score_str);
+    int score_w = (int)textwidth(score_str);
     outtextxy(SCREEN_WIDTH - score_w - 10, 4, score_str);
 
     // 连击显示（中间）
@@ -633,7 +633,7 @@ static void DrawRhythm() {
         _stprintf_s(combo_str, 32, _T("%d COMBO"), combo);
         settextcolor(RGB(255, 200, 50));
         settextstyle(18, 0, _T("Consolas"));
-        int cw = textwidth(combo_str);
+        int cw = (int)textwidth(combo_str);
         outtextxy(SCREEN_WIDTH / 2 - cw / 2, 26, combo_str);
     }
 
