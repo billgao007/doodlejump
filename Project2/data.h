@@ -96,6 +96,7 @@ typedef struct {
     int is_handled; // P2是否已响应
     JudgmentType judgment; // 判定结果
     int hit_flash_timer; // 命中闪烁计时（帧数），>0 表示正在播放命中动画
+    int pitch_index; // 音高编号 0-7，同一音符录制和回放触发相同音调
 } RhythmNote;
 
 // 节奏模式：浮动得分弹出文字
@@ -172,6 +173,10 @@ typedef struct {
 
     // 音符下落速度倍率（可随难度调整）
     float fall_speed_mult;
+
+    // 轮次结算系统：每3轮显示一次结算面板
+    int settlement_round_counter; // 当前已完成的轮数（每轮结束+1）
+    int pending_settlement;       // 1=当前应显示结算，0=跳过直接继续
 } RhythmData;
 
 /// 包含当前状态、玩家信息、平台、Boss、子弹、道具

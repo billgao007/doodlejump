@@ -31,8 +31,11 @@ float GetSpiritX(long long current_time);
 // 获取 Spirit 的当前 Y 坐标（带弹跳动画）
 float GetSpiritY(long long current_time);
 
-// 获取一个音符在屏幕上的 Y 坐标
+// 获取一个音符在屏幕上的 Y 坐标（通用）
 float GetNoteYPosition(long long note_timestamp, long long current_time, float falling_speed);
+
+// 获取 ECHO 阶段音符的 Y 坐标（使用目标命中时间，到达判定线=JUDGMENT_Y）
+float GetEchoNoteY(long long target_time, long long current_time, float falling_speed);
 
 // 获取连击数
 int GetCombo();

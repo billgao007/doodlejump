@@ -3,8 +3,30 @@
 #include <math.h>
 #include <string.h>
 
-#define SPIRIT_BOUNCE_TIME 200 // ms 弹跳动画时长
-#define POPUP_LIFE 45          // 弹出文字存活帧数
+#define SPIRIT_BOUNCE_TIME 200
+#define POPUP_LIFE 45
+#define PLAYER_SECONDS 5        // 每位玩家 5 秒输入时间
+
+// ---- 内部辅助 ----
+
+// 进入下一小节的通用逻辑
+static void AdvanceToNextBar(void) {
+    RhythmData* rd = &g_game.rhythm_data;
+    rd->bar_index++;
+    // 保留累积分和结算轮次计数
+    int saved_score     = rd->current_score;
+    int saved_perfect   = rd->total_perfect;
+    int saved_good      = rd->total_good;
+    int saved_miss      = rd->total_miss;
+    int saved_settle    = rd->settlement_round_counter;
+    InitRhythm();
+    rd->current_score   = saved_score;
+    rd->total_perfect   = saved_perfect;
+    rd->total_good      = saved_good;
+    rd->total_miss      = saved_miss;
+    rd->settlement_round_counter = saved_settle;
+    rd->pending_settlement = 0;
+}
 
 // --- 内部辅助函数 ---
 
@@ -15,14 +37,12 @@ static void ApplyJudgment(RhythmNote* note, JudgmentType judgment, float note_x,
     note->hit_flash_timer = HIT_FLASH_FRAMES;
 
     int score_add = 0;
-    SoundType sound = SOUND_MISS;
 
     if (judgment == JUDGMENT_PERFECT) {
         g_game.rhythm_data.total_perfect++;
         g_game.rhythm_data.combo++;
         score_add = 100 + g_game.rhythm_data.combo * 5; // 连击加分
         g_game.rhythm_data.current_score += score_add;
-        sound = SOUND_PERFECT;
 
         // Perfect 波纹特效
         g_game.rhythm_data.perfect_ripple_active = 1;
@@ -33,18 +53,20 @@ static void ApplyJudgment(RhythmNote* note, JudgmentType judgment, float note_x,
         g_game.rhythm_data.combo++;
         score_add = 50 + g_game.rhythm_data.combo * 2;
         g_game.rhythm_data.current_score += score_add;
-        sound = SOUND_GOOD;
     } else {
         g_game.rhythm_data.total_miss++;
         g_game.rhythm_data.combo = 0; // 断连
-        sound = SOUND_MISS;
     }
 
     if (g_game.rhythm_data.combo > g_game.rhythm_data.max_combo) {
         g_game.rhythm_data.max_combo = g_game.rhythm_data.combo;
     }
 
-    PlayEffect(sound);
+    // 播放判定音效 + 音符原始音调
+    PlayNoteBeep(note->pitch_index);
+    if (judgment == JUDGMENT_PERFECT)      PlayEffect(SOUND_PERFECT);
+    else if (judgment == JUDGMENT_GOOD)    PlayEffect(SOUND_GOOD);
+    else                                   PlayEffect(SOUND_MISS);
 
     // 生成浮动得分弹出文字
     for (int i = 0; i < MAX_SCORE_POPUPS; i++) {
@@ -104,7 +126,8 @@ void InitRhythm() {
     rd->sub_state = RHYTHM_PRE_START;
     rd->bar_index = 0;
     rd->bpm = 120;
-    rd->bar_duration = (60000LL * 4) / rd->bpm;
+    // 每位玩家 5 秒，小节总时长 = 10 秒
+    rd->bar_duration = (long long)PLAYER_SECONDS * 2 * 1000LL;
     rd->bar_start_time = GetGameTimeMs();
     
     rd->spirit_x = (float)SCREEN_WIDTH / 2.0f; // 初始居中
@@ -117,6 +140,9 @@ void InitRhythm() {
     rd->perfect_ripple_duration = 200;
     rd->fall_speed_mult = 1.0f;
     rd->bg_pulse_phase = 0.0f;
+
+    // 结算系统：保留累积分和计数器
+    // settlement_round_counter 和 pending_settlement 由调用方管理
 
     // 初始化弹出文字状态
     for (int i = 0; i < MAX_SCORE_POPUPS; i++) {
@@ -149,61 +175,58 @@ void UpdateRhythm(long long current_time) {
             rd->rhythm_particles[i].life--;
             rd->rhythm_particles[i].x += rd->rhythm_particles[i].vx;
             rd->rhythm_particles[i].y += rd->rhythm_particles[i].vy;
-            rd->rhythm_particles[i].vy += 0.15f; // 重力
+            rd->rhythm_particles[i].vy += 0.15f;
             rd->rhythm_particles[i].radius *= 0.94f;
         }
     }
 
-    // 更新音符命中闪烁计时器
+    // 更新音符命中闪烁
     for (int i = 0; i < rd->recorded_count; i++) {
-        if (rd->recorded_sequence[i].hit_flash_timer > 0) {
+        if (rd->recorded_sequence[i].hit_flash_timer > 0)
             rd->recorded_sequence[i].hit_flash_timer--;
-        }
     }
 
-    // 更新轨道高亮计时器
+    // 更新轨道高亮
     for (int t = 0; t < 2; t++) {
         if (rd->track_glow_timer[t] > 0) rd->track_glow_timer[t]--;
     }
 
     // 更新 Spirit 弹跳
     rd->spirit_y += rd->spirit_vy;
-    rd->spirit_vy += 0.5f; // 重力
+    rd->spirit_vy += 0.5f;
     if (rd->spirit_y >= rd->spirit_base_y) {
         rd->spirit_y = rd->spirit_base_y;
         rd->spirit_vy = 0.0f;
     }
-
-    // Spirit 待机浮动
     rd->spirit_bob_timer = (rd->spirit_bob_timer + 1) % 120;
     
     // 更新 Perfect 波纹
     if (rd->perfect_ripple_active) {
         long long ripple_elapsed = current_time - rd->perfect_ripple_start;
-        if (ripple_elapsed >= rd->perfect_ripple_duration) {
+        if (ripple_elapsed >= rd->perfect_ripple_duration)
             rd->perfect_ripple_active = 0;
-        }
     }
 
     // ECHO 阶段：自动判定 + Miss 超时检测
     if (rd->sub_state == RHYTHM_PHASE_ECHO) {
         AutoJudgeNotes(current_time);
 
-        // 超时 Miss 检测
+        long long echo_start = rd->bar_start_time + rd->bar_duration / 2;
         for (int i = 0; i < rd->recorded_count; i++) {
             RhythmNote* note = &rd->recorded_sequence[i];
             if (!note->is_handled) {
-                long long note_deadline = rd->bar_start_time + note->relative_timestamp + GOOD_WINDOW;
-                if (current_time > note_deadline) {
+                // 音符目标命中时间 = echo_start + relative_timestamp
+                long long note_target = echo_start + note->relative_timestamp;
+                if (current_time > note_target + GOOD_WINDOW) {
                     float note_x = (note->track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
-                    float note_y = GetNoteYPosition(rd->bar_start_time + note->relative_timestamp, current_time, FALLING_SPEED * rd->fall_speed_mult);
+                    float note_y = GetEchoNoteY(note_target, current_time, FALLING_SPEED * rd->fall_speed_mult);
                     ApplyJudgment(note, JUDGMENT_MISS, note_x, note_y, current_time);
                 }
             }
         }
     }
 
-    // 状态机推进
+    // ---- 状态机推进 ----
     if (rd->sub_state == RHYTHM_PRE_START && elapsed > 1000) {
         rd->sub_state = RHYTHM_PHASE_RECORD;
         rd->bar_start_time = GetGameTimeMs();
@@ -212,24 +235,25 @@ void UpdateRhythm(long long current_time) {
     }
     else if (rd->sub_state == RHYTHM_PHASE_RECORD && elapsed > rd->bar_duration / 2) {
         rd->sub_state = RHYTHM_PHASE_ECHO;
-        rd->p2_input_time = 0; // 重置防抖，避免录音阶段防抖影响回放操作
+        rd->p2_input_time = 0;
     }
     else if (rd->sub_state == RHYTHM_PHASE_ECHO && elapsed > rd->bar_duration) {
         FinishBar();
+        rd->settlement_round_counter++;
+        // 每 3 轮显示结算面板
+        rd->pending_settlement = (rd->settlement_round_counter % 3 == 0) ? 1 : 0;
         rd->sub_state = RHYTHM_POST_SCORE;
     }
-    else if (rd->sub_state == RHYTHM_POST_SCORE && elapsed > rd->bar_duration + 2000) {
-        rd->bar_index++;
-        // 保留累计分数，重置其他
-        int saved_score = rd->current_score;
-        int saved_perfect = rd->total_perfect;
-        int saved_good = rd->total_good;
-        int saved_miss = rd->total_miss;
-        InitRhythm();
-        rd->current_score = saved_score;
-        rd->total_perfect = saved_perfect;
-        rd->total_good = saved_good;
-        rd->total_miss = saved_miss;
+    else if (rd->sub_state == RHYTHM_POST_SCORE) {
+        if (rd->pending_settlement) {
+            // 显示结算面板 2 秒
+            if (elapsed > rd->bar_duration + 2000) {
+                AdvanceToNextBar();
+            }
+        } else {
+            // 不显示结算：立即进入下一轮
+            AdvanceToNextBar();
+        }
     }
 }
 
@@ -250,6 +274,12 @@ void RecordNote(long long current_time, TrackID track) {
         note->is_handled = 0;
         note->judgment = JUDGMENT_NONE;
         note->hit_flash_timer = 0;
+        // 按轨道分配音高：左轨 do-mi-sol-xi 循环，右轨 re-fa-la-do 循环
+        int seq = rd->recorded_count / 2; // 同轨编号
+        if (track == TRACK_LEFT)
+            note->pitch_index = (seq * 2) % 8;      // 0,2,4,6 → do, mi, sol, xi
+        else
+            note->pitch_index = (seq * 2 + 1) % 8;  // 1,3,5,7 → re, fa, la, do(高)
         rd->recorded_count++;
     }
 }
@@ -271,30 +301,31 @@ void AutoJudgeNotes(long long current_time) {
     RhythmData* rd = &g_game.rhythm_data;
     float spirit_cx = GetSpiritX(current_time);
     float fall_speed = FALLING_SPEED * rd->fall_speed_mult;
+    // ECHO 阶段起始时间：音符从此刻开始下落
+    long long echo_start = rd->bar_start_time + rd->bar_duration / 2;
 
     for (int i = 0; i < rd->recorded_count; i++) {
         RhythmNote* note = &rd->recorded_sequence[i];
         if (note->is_handled) continue;
 
-        long long note_abs_time = rd->bar_start_time + note->relative_timestamp;
-        float note_y = GetNoteYPosition(note_abs_time, current_time, fall_speed);
+        // 音符目标命中时间 = echo_start + relative_timestamp
+        long long note_target = echo_start + note->relative_timestamp;
+        float note_y = GetEchoNoteY(note_target, current_time, fall_speed);
 
-        // 音符到达判定线附近
+        // 音符到达判定线附近（±30px 范围内自动判定）
         if (note_y >= JUDGMENT_Y - 30.0f && note_y <= JUDGMENT_Y + 30.0f) {
             float note_x = (note->track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
             
             // 检查 Spirit 是否在正确轨道
             float dist_to_note = fabsf(spirit_cx - note_x);
-            int on_correct_track = (dist_to_note < 60.0f); // 判定范围
+            int on_correct_track = (dist_to_note < 60.0f);
 
             if (on_correct_track) {
-                // 计算时间偏差
-                long long timing_error = current_time - note_abs_time;
+                long long timing_error = current_time - note_target;
                 if (timing_error < 0) timing_error = -timing_error;
 
                 if (timing_error < PERFECT_WINDOW) {
                     ApplyJudgment(note, JUDGMENT_PERFECT, note_x, note_y, current_time);
-                    // 轨道高亮
                     rd->track_glow_timer[note->track] = 20;
                 } else if (timing_error < GOOD_WINDOW) {
                     ApplyJudgment(note, JUDGMENT_GOOD, note_x, note_y, current_time);
@@ -303,7 +334,7 @@ void AutoJudgeNotes(long long current_time) {
                     ApplyJudgment(note, JUDGMENT_MISS, note_x, note_y, current_time);
                 }
             }
-            // 如果不在正确轨道，不做判定；等超时 Miss 逻辑处理
+            // 不在正确轨道 → 等超时 Miss 逻辑处理
         }
     }
 }
@@ -334,6 +365,15 @@ float GetNoteYPosition(long long note_timestamp, long long current_time, float f
     return (float)elapsed * falling_speed;
 }
 
+// 回放阶段专用：从判定线反推音符 Y 坐标
+// target_time = echo_start + relative_timestamp（音符到达判定线的时刻）
+//   → 到达判定线时 Y = JUDGMENT_Y
+//   → 提前出现时 Y < JUDGMENT_Y（从屏幕上方下落）
+float GetEchoNoteY(long long target_time, long long current_time, float falling_speed) {
+    long long remaining = target_time - current_time;
+    return (float)JUDGMENT_Y - (float)remaining * falling_speed;
+}
+
 int GetCombo() {
     return g_game.rhythm_data.combo;
 }
@@ -355,12 +395,15 @@ int GetTrackGlow(TrackID track) {
 void FinishBar() {
     RhythmData* rd = &g_game.rhythm_data;
     long long now = GetGameTimeMs();
+    long long echo_start = rd->bar_start_time + rd->bar_duration / 2;
     for (int i = 0; i < rd->recorded_count; i++) {
         RhythmNote* note = &rd->recorded_sequence[i];
         if (!note->is_handled) {
             float note_x = (note->track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
-            float note_y = GetNoteYPosition(rd->bar_start_time + note->relative_timestamp, now, FALLING_SPEED * rd->fall_speed_mult);
-            ApplyJudgment(note, JUDGMENT_MISS, note_x, note_y > SCREEN_HEIGHT ? JUDGMENT_Y : note_y, now);
+            long long note_target = echo_start + note->relative_timestamp;
+            float note_y = GetEchoNoteY(note_target, now, FALLING_SPEED * rd->fall_speed_mult);
+            if (note_y > SCREEN_HEIGHT) note_y = (float)JUDGMENT_Y;
+            ApplyJudgment(note, JUDGMENT_MISS, note_x, note_y, now);
         }
     }
 }

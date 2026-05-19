@@ -26,6 +26,9 @@ void StopBackgroundMusic();
 
 void PlayEffect(SoundType type);
 
+// 播放指定音高的短促提示音（pitch_index 0-7 对应 do~xi）
+void PlayNoteBeep(int pitch_index);
+
 long long GetGameTimeMs();
 
 void ResetAudioTiming();

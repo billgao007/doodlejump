@@ -262,49 +262,13 @@ static void DrawGameOver() {
     outtextxy(80, 320, _T("Press SPACE to Restart"));
 }
 
-// ========== 节奏模式：Spirit 角色绘制 ==========
+// ========== 节奏模式：Spirit 角色绘制（使用 Doodle Jump 形象）==========
 static void DrawRhythmSpirit(float cx, float cy, long long current_time) {
-    int x = (int)cx, y = (int)cy;
-    int body_r = 18;
-    int eye_r = 4;
-
-    // 身体阴影
-    setfillcolor(RGB(200, 100, 20));
-    solidcircle(x + 2, y + 2, body_r);
-
-    // 身体主体（橙色小怪兽）
-    setfillcolor(RGB(255, 140, 30));
-    solidcircle(x, y, body_r);
-
-    // 高光
-    setfillcolor(RGB(255, 180, 80));
-    solidcircle(x - 5, y - 7, 7);
-
-    // 眼睛（白色 + 黑色瞳孔）
-    setfillcolor(WHITE);
-    solidcircle(x - 6, y - 4, eye_r + 1);
-    solidcircle(x + 6, y - 4, eye_r + 1);
-
-    // 瞳孔微小动画（跟随 BPM 脉冲）
-    float pulse = g_game.rhythm_data.bg_pulse_phase;
-    int pupil_offset = (int)(sinf(pulse * 6.28318f) * 1.5f);
-    setfillcolor(BLACK);
-    solidcircle(x - 6 + pupil_offset, y - 4, eye_r - 1);
-    solidcircle(x + 6 + pupil_offset, y - 4, eye_r - 1);
-
-    // 微笑嘴巴
-    setlinecolor(BLACK);
-    setlinestyle(PS_SOLID, 2);
-    arc(x - 6, y + 2, x + 6, y + 10, 0.0f, 3.14159f);
-
-    // 小触角/天线
-    setlinecolor(RGB(255, 140, 30));
-    setlinestyle(PS_SOLID, 3);
-    line(x - 2, y - body_r, x - 4, y - body_r - 10);
-    line(x + 2, y - body_r, x + 4, y - body_r - 10);
-    setfillcolor(RGB(255, 220, 50));
-    solidcircle(x - 4, y - body_r - 10, 3);
-    solidcircle(x + 4, y - body_r - 10, 3);
+    (void)current_time;
+    int w = 30, h = 30;
+    int x = (int)(cx - w / 2.0f);
+    int y = (int)(cy - h / 2.0f);
+    putimage(x, y, &img_player);
 }
 
 // ========== 节奏模式：音符绘制（菱形 + 光晕）==========
@@ -433,18 +397,21 @@ static void DrawRhythmParticles() {
 // ========== 节奏模式：绘制下落音符轨迹 ==========
 static void DrawNoteTrails(long long current_time) {
     float fall_speed = FALLING_SPEED * g_game.rhythm_data.fall_speed_mult;
+    RhythmData* rd = &g_game.rhythm_data;
+    long long echo_start = rd->bar_start_time + rd->bar_duration / 2;
 
-    for (int i = 0; i < g_game.rhythm_data.recorded_count; i++) {
-        RhythmNote* note = &g_game.rhythm_data.recorded_sequence[i];
+    for (int i = 0; i < rd->recorded_count; i++) {
+        RhythmNote* note = &rd->recorded_sequence[i];
         if (note->is_handled && note->hit_flash_timer <= 0) continue;
 
-        long long note_abs = g_game.rhythm_data.bar_start_time + note->relative_timestamp;
-        float note_y = GetNoteYPosition(note_abs, current_time, fall_speed);
+        // ECHO / POST_SCORE 阶段：用 echo 目标时间计算
+        long long note_target = echo_start + note->relative_timestamp;
+        float note_y = GetEchoNoteY(note_target, current_time, fall_speed);
         if (note_y < -100 || note_y > SCREEN_HEIGHT + 100) continue;
 
         int note_x = (note->track == TRACK_LEFT) ? (int)(SCREEN_WIDTH / 4.0f) : (int)(3.0f * SCREEN_WIDTH / 4.0f);
 
-        // 拖尾效果：在音符上方绘制渐隐的虚影
+        // 拖尾效果：在音符上方绘制渐隐虚影
         int trail_len = 8;
         for (int t = 1; t <= trail_len; t++) {
             float trail_y = note_y - t * 6.0f;
@@ -524,14 +491,19 @@ static void DrawRhythm() {
     DrawNoteTrails(current_time);
 
     // ---- 4. 下落的音符 ----
-    for (int i = 0; i < g_game.rhythm_data.recorded_count; i++) {
-        RhythmNote* note = &g_game.rhythm_data.recorded_sequence[i];
-        long long note_abs = g_game.rhythm_data.bar_start_time + note->relative_timestamp;
-        float note_y = GetNoteYPosition(note_abs, current_time, fall_speed);
+    {
+        RhythmData* rd = &g_game.rhythm_data;
+        long long echo_start = rd->bar_start_time + rd->bar_duration / 2;
+        for (int i = 0; i < rd->recorded_count; i++) {
+            RhythmNote* note = &rd->recorded_sequence[i];
+            // 用 echo_start 作为基准计算目标时间
+            long long note_target = echo_start + note->relative_timestamp;
+            float note_y = GetEchoNoteY(note_target, current_time, fall_speed);
 
-        if (note_y > -60 && note_y < SCREEN_HEIGHT + 60) {
-            int note_x = (note->track == TRACK_LEFT) ? (int)(SCREEN_WIDTH / 4.0f) : (int)(3.0f * SCREEN_WIDTH / 4.0f);
-            DrawRhythmNote(note_x, (int)note_y, note->track, note->judgment, note->hit_flash_timer);
+            if (note_y > -60 && note_y < SCREEN_HEIGHT + 60) {
+                int note_x = (note->track == TRACK_LEFT) ? (int)(SCREEN_WIDTH / 4.0f) : (int)(3.0f * SCREEN_WIDTH / 4.0f);
+                DrawRhythmNote(note_x, (int)note_y, note->track, note->judgment, note->hit_flash_timer);
+            }
         }
     }
 
