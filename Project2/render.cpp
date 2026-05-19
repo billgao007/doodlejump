@@ -676,38 +676,43 @@ static void DrawRhythm() {
 
     // ---- 11. POST_SCORE 结算面板 ----
     if (g_game.rhythm_data.sub_state == RHYTHM_POST_SCORE) {
-        // 半透明遮罩
+        // 半透明遮罩（更深更实）
         setfillcolor(RGB(0, 0, 0));
-        solidrectangle(40, 180, SCREEN_WIDTH - 40, 420);
-        setfillcolor(RGB(30, 30, 60));
-        solidrectangle(42, 182, SCREEN_WIDTH - 42, 418);
+        solidrectangle(40, 160, SCREEN_WIDTH - 40, 430);
+        setfillcolor(RGB(15, 20, 50));
+        solidrectangle(42, 162, SCREEN_WIDTH - 42, 428);
 
-        settextcolor(RGB(255, 200, 50));
-        settextstyle(28, 0, _T("Consolas"));
-        outtextxy(SCREEN_WIDTH / 2 - 60, 200, _T("RESULTS"));
+        setbkmode(TRANSPARENT);
+        settextcolor(RGB(255, 220, 80));
+        settextstyle(32, 0, _T("Consolas"));
+        outtextxy(SCREEN_WIDTH / 2 - (int)textwidth(_T("RESULTS")) / 2, 180, _T("RESULTS"));
 
         TCHAR buf[64];
-        settextstyle(18, 0, _T("Consolas"));
-        settextcolor(RGB(0, 255, 100));
-        _stprintf_s(buf, 64, _T("Perfect:  %d"), g_game.rhythm_data.total_perfect);
-        outtextxy(80, 250, buf);
+        int left_x = 80;
+        settextstyle(22, 0, _T("Consolas"));
 
-        settextcolor(RGB(255, 220, 50));
-        _stprintf_s(buf, 64, _T("Good:     %d"), g_game.rhythm_data.total_good);
-        outtextxy(80, 280, buf);
+        settextcolor(RGB(120, 255, 120));
+        _stprintf_s(buf, 64, _T("Perfect:   %d"), g_game.rhythm_data.total_perfect);
+        outtextxy(left_x, 230, buf);
 
-        settextcolor(RGB(255, 80, 80));
-        _stprintf_s(buf, 64, _T("Miss:     %d"), g_game.rhythm_data.total_miss);
-        outtextxy(80, 310, buf);
+        settextcolor(RGB(255, 255, 100));
+        _stprintf_s(buf, 64, _T("Good:      %d"), g_game.rhythm_data.total_good);
+        outtextxy(left_x, 268, buf);
 
-        settextcolor(RGB(100, 200, 255));
+        settextcolor(RGB(255, 120, 120));
+        _stprintf_s(buf, 64, _T("Miss:      %d"), g_game.rhythm_data.total_miss);
+        outtextxy(left_x, 306, buf);
+
+        settextcolor(RGB(130, 200, 255));
         _stprintf_s(buf, 64, _T("Max Combo: %d"), g_game.rhythm_data.max_combo);
-        outtextxy(80, 340, buf);
+        outtextxy(left_x, 344, buf);
 
-        settextcolor(RGB(255, 255, 200));
-        settextstyle(24, 0, _T("Consolas"));
+        settextcolor(RGB(255, 255, 255));
+        settextstyle(28, 0, _T("Consolas"));
         _stprintf_s(buf, 64, _T("Score: %d"), g_game.rhythm_data.current_score);
-        outtextxy(80, 380, buf);
+        outtextxy(left_x, 390, buf);
+
+        setbkmode(OPAQUE);
     }
 
     // ---- 12. 底部进度条 ----

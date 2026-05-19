@@ -9,7 +9,7 @@
 #define SPIRIT_LERP_TIME 80  // ms（板子滑动 Lerp 时间）
 #define JUDGMENT_Y 520       // 判定线 Y 坐标
 #define HIT_FLASH_FRAMES 12  // 命中闪烁帧数
-#define BOUNCE_DURATION 30   // 弹飞动画持续帧数
+#define BOUNCE_DURATION 40   // 弹飞动画持续帧数（加长让 player 飞更高）
 #define EXPLODE_DURATION 25  // 爆炸动画持续帧数
 
 // 初始化节奏模式

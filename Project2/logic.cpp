@@ -272,8 +272,13 @@ void RespawnBoss() {
     Boss* b = &g_game.boss;
     g_game.boss_respawn_count++;
 
-    // 血量翻倍
-    int new_max_hp = 2000 * (1 << g_game.boss_respawn_count); // 2^count * 2000
+    // 防止 int 溢出：最多重生 15 次 (HP ≈ 6500万)
+    if (g_game.boss_respawn_count > 15) g_game.boss_respawn_count = 15;
+
+    // 血量翻倍（安全计算，防溢出）
+    long long hp_ll = 2000LL * (1LL << g_game.boss_respawn_count);
+    if (hp_ll > 2000000000LL) hp_ll = 2000000000LL;
+    int new_max_hp = (int)hp_ll;
     b->max_hp = new_max_hp;
     b->hp = new_max_hp;
     b->phase = 1;
@@ -293,8 +298,15 @@ void RespawnBoss() {
     b->spread_fire_timer = 0;
     b->spread_wave_fired = 0;
 
-    // 重力恢复正常
-    g_game.gravity_dir = 1;
+    // 重力恢复正常 + 玩家安全重定位
+    if (g_game.gravity_dir == -1) {
+        g_game.gravity_dir = 1;
+        // 重力翻转后玩家可能在极高位置 → 安全下落到屏幕中上部
+        if (g_game.player.y < 50.0f || g_game.player.y > SCREEN_HEIGHT + 50.0f) {
+            g_game.player.y = SCREEN_HEIGHT / 2.0f;
+            g_game.player.vy = JUMP_FORCE;
+        }
+    }
 
     // 华丽复活特效计时（2秒）
     g_game.boss_respawn_effect_timer = 2 * FPS;
@@ -399,9 +411,11 @@ static void DoLogicStep() {
     // 边缘掉落与扣血判定
     if (p->y > SCREEN_HEIGHT + p->radius) { // 掉出底部
         p->hp -= 20;
+        p->y = SCREEN_HEIGHT - p->radius - 1; // 钳制回屏幕内，防止反复坠落
         p->vy = JUMP_FORCE * 1.5f; // 高高弹起
     } else if (p->y < -p->radius && g_game.gravity_dir == -1) { // 反转重力掉出顶部
         p->hp -= 20;
+        p->y = p->radius + 1; // 钳制回屏幕内
         p->vy = -JUMP_FORCE * 1.5f;
     }
 
@@ -619,6 +633,7 @@ static void DoLogicStep() {
     // 伤害翻倍检查：基于爬升高度（分数）
     if (g_game.endless_mode && g_game.score >= g_game.next_damage_bonus_score) {
         g_game.damage_bonus_level++;
+        if (g_game.damage_bonus_level > 20) g_game.damage_bonus_level = 20; // 防止溢出
         g_game.player.base_damage *= 2;
         g_game.next_damage_bonus_score += 500; // 下一档 +500 分
         SetBuffHint(_T("子弹伤害翻倍!"));

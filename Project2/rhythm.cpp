@@ -63,11 +63,11 @@ static void ApplyJudgment(RhythmNote* note, JudgmentType judgment, float note_x,
         g_game.rhythm_data.perfect_ripple_start = current_time;
         g_game.rhythm_data.perfect_ripple_x = note_x;
 
-        // 向上弹跳（落在板子上方）
+        // 向上弹跳（落在板子上方，飞出屏幕顶部）
         note->bounce_active = 1;
         note->bounce_timer = BOUNCE_DURATION;
-        note->bounce_vx = (note->track == TRACK_LEFT) ? -2.5f : 2.5f; // 轻微横向偏移
-        note->bounce_vy = -14.0f;  // 强力向上弹起
+        note->bounce_vx = (note->track == TRACK_LEFT) ? -2.0f : 2.0f; // 轻微横向偏移
+        note->bounce_vy = -22.0f;  // 强力向上弹起，飞出屏幕
     } else if (judgment == JUDGMENT_GOOD) {
         g_game.rhythm_data.total_good++;
         g_game.rhythm_data.combo++;
@@ -76,8 +76,8 @@ static void ApplyJudgment(RhythmNote* note, JudgmentType judgment, float note_x,
 
         note->bounce_active = 1;
         note->bounce_timer = BOUNCE_DURATION;
-        note->bounce_vx = (note->track == TRACK_LEFT) ? -1.8f : 1.8f;
-        note->bounce_vy = -10.0f;
+        note->bounce_vx = (note->track == TRACK_LEFT) ? -1.5f : 1.5f;
+        note->bounce_vy = -16.0f;
     } else {
         g_game.rhythm_data.total_miss++;
         g_game.rhythm_data.combo = 0;
