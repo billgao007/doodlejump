@@ -298,15 +298,8 @@ void RespawnBoss() {
     b->spread_fire_timer = 0;
     b->spread_wave_fired = 0;
 
-    // 重力恢复正常 + 玩家安全重定位
-    if (g_game.gravity_dir == -1) {
-        g_game.gravity_dir = 1;
-        // 重力翻转后玩家可能在极高位置 → 安全下落到屏幕中上部
-        if (g_game.player.y < 50.0f || g_game.player.y > SCREEN_HEIGHT + 50.0f) {
-            g_game.player.y = SCREEN_HEIGHT / 2.0f;
-            g_game.player.vy = JUMP_FORCE;
-        }
-    }
+    // 重力保持正常（无尽模式不反转）
+    g_game.gravity_dir = 1;
 
     // 华丽复活特效计时（2秒）
     g_game.boss_respawn_effect_timer = 2 * FPS;
@@ -470,10 +463,12 @@ static void DoLogicStep() {
                 SpawnHitParticles(bullet->x, bullet->y, bullet->damage);
                 should_remove = 1;
 
-                // 二阶段判定
+                // 二阶段判定（无尽模式禁用重力反转）
                 if (b->hp < b->max_hp / 2 && b->phase == 1) {
                     b->phase = 2;
-                    g_game.gravity_dir = -1; // 重力反转！
+                    if (!g_game.endless_mode) {
+                        g_game.gravity_dir = -1; // 重力反转！（仅普通模式）
+                    }
                 }
             }
         }
