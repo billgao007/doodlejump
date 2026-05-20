@@ -193,6 +193,7 @@ void InitLogic() {
     g_game.damage_bonus_level = 0;
     g_game.next_damage_bonus_score = 500; // 每500分伤害翻倍
     g_game.boss_respawn_effect_timer = 0;
+    g_game.play_time = 0;
 
     InitBulletPool();
     for (int i = 0; i < MAX_BUFFS; i++) g_game.buffs[i].active = 0;
@@ -323,6 +324,9 @@ static void SpawnAirBuff() {
 static void DoLogicStep() {
     Player* p = &g_game.player;
     Boss* b = &g_game.boss;
+
+    // 0. 计时器（仅正常流速时递增，慢动作时不重复计数）
+    if (g_game.time_scale >= 1.0f) g_game.play_time++;
 
     // 1. 时间流速处理
     if (g_game.slow_timer > 0) {

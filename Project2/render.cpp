@@ -257,11 +257,21 @@ static void DrawGame() {
 
     // 5. 画 UI
     TCHAR textBuf[64];
+    setbkmode(TRANSPARENT); // 全局透明文字，无背景
     settextcolor(BLACK); settextstyle(16, 0, _T("Consolas"));
 
+    // 左上角：计时器
+    int sec = g_game.play_time / FPS;
+    int min = sec / 60; sec %= 60;
+    _stprintf_s(textBuf, 64, _T("%02d:%02d"), min, sec);
+    settextcolor(RGB(60, 60, 60)); settextstyle(16, 0, _T("Consolas"));
+    outtextxy(6, 2, textBuf);
+
+    // Boss 血条
     setfillcolor(RED);
     solidrectangle(100, 5, 100 + (int)(200 * ((float)b->hp / b->max_hp)), 15);
-    outtextxy(10, 2, _T("BOSS:"));
+    settextcolor(BLACK);
+    outtextxy(50, 2, _T("BOSS:"));
 
     setfillcolor(GREEN);
     solidrectangle(10, SCREEN_HEIGHT - 20, 10 + (int)(100 * ((float)g_game.player.hp / g_game.player.max_hp)), SCREEN_HEIGHT - 5);
@@ -295,7 +305,6 @@ static void DrawGame() {
         solidrectangle(SCREEN_WIDTH - 110, 7, SCREEN_WIDTH - 110 + progress, 16);
         settextcolor(RGB(220, 220, 220)); settextstyle(10, 0, _T("Consolas"));
         outtextxy(SCREEN_WIDTH - 108, 8, _T("NEXT DMG x2"));
-        setbkmode(OPAQUE);
     }
 
     if (g_game.buff_hint_timer > 0 && g_game.buff_hint[0] != '\0') {

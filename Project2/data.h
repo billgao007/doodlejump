@@ -223,6 +223,7 @@ typedef struct {
     int boss_respawn_effect_timer; // Boss 复活特效计时器
 
     GameState state_before_pause; // 暂停前状态，用于恢复
+    int play_time;              // 游戏计时器（逻辑帧数）
 } GameData;
 
 extern GameData g_game;
