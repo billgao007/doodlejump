@@ -44,6 +44,13 @@ void PlayEffect(SoundType type) {
     }
 }
 
+// Win32 线程参数：传递给 Beep 的频率
+static DWORD WINAPI BeepThreadProc(LPVOID lpParam) {
+    int freq = (int)(INT_PTR)lpParam;
+    Beep(freq, 150);
+    return 0;
+}
+
 void PlayNoteBeep(int pitch_index) {
     // C4 大调音阶: do re mi fa sol la xi do (C4~C5, 8 个音)
     static const int note_freqs[8] = {
@@ -58,10 +65,10 @@ void PlayNoteBeep(int pitch_index) {
     };
     if (pitch_index < 0) pitch_index = 0;
     if (pitch_index > 7) pitch_index = pitch_index % 8;
-    // Beep 可能在部分系统上被禁用；MessageBeep 作为保底
-    if (!Beep(note_freqs[pitch_index], 80)) {
-        MessageBeep(MB_OK);
-    }
+    // 用独立线程异步发声，不阻塞游戏主循环
+    HANDLE hThread = CreateThread(NULL, 0, BeepThreadProc,
+                                   (LPVOID)(INT_PTR)note_freqs[pitch_index], 0, NULL);
+    if (hThread) CloseHandle(hThread);
 }
 
 void ResetAudioTiming() {

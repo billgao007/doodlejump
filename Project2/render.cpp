@@ -494,14 +494,9 @@ static void DrawRhythm() {
     int judgment_y = JUDGMENT_Y;
     RhythmData* rd = &g_game.rhythm_data;
 
-    // ---- 1. 背景：跳跃模式蓝白渐变 ----
-    for (int y = 0; y < SCREEN_HEIGHT; y++) {
-        int r = 180 + y * 60 / SCREEN_HEIGHT;
-        int g = 210 + y * 40 / SCREEN_HEIGHT;
-        int b = 240 + y * 15 / SCREEN_HEIGHT;
-        setfillcolor(RGB(r, g, b));
-        solidrectangle(0, y, SCREEN_WIDTH, y);
-    }
+    // ---- 1. 背景：单次填充（消除逐行绘制的性能瓶颈）----
+    setfillcolor(RGB(180, 210, 240));
+    solidrectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
     // ---- 2. 左右半区淡色标识 ----
     int left_glow = GetTrackGlow(TRACK_LEFT);
@@ -543,12 +538,11 @@ static void DrawRhythm() {
 
             float note_x, note_y;
             if (note->bounce_active) {
-                // 向上弹跳动画：player 从板子上方弹起，受重力回落
+                // 抛物线弹跳：player 从板子向上飞出屏幕
                 note_x = (note->track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
-                // 用 velocity 积分模拟抛物线
                 float bt = (float)(BOUNCE_DURATION - note->bounce_timer) / BOUNCE_DURATION;
-                note_x = note_x + note->bounce_vx * bt * 6.0f;
-                note_y = judgment_y + note->bounce_vy * bt * 4.0f; // 初始向上
+                note_x = note_x + note->bounce_vx * bt * 14.0f;
+                note_y = judgment_y + note->bounce_vy * bt * 12.0f;
             } else if (note->exploding) {
                 // 爆炸中：画在判定线位置，由粒子表现爆炸
                 note_x = (note->track == TRACK_LEFT) ? (SCREEN_WIDTH / 4.0f) : (3.0f * SCREEN_WIDTH / 4.0f);
