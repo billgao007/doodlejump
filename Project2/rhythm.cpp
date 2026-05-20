@@ -295,6 +295,9 @@ void RecordNote(long long current_time, TrackID track) {
         else
             note->pitch_index = (seq * 2 + 1) % 8;  // 1,3,5,7 → re, fa, la, do(高)
         rd->recorded_count++;
+
+        // P1 按下时播放对应轨道的音调反馈
+        PlayNoteBeep(note->pitch_index);
     }
 }
 
@@ -309,6 +312,9 @@ void MovePlatform(TrackID track) {
     rd->platform_target_x = target;
     rd->platform_lerp_start = now;
     rd->platform_x = GetPlatformX(now);
+
+    // P2 移动板子时播放对应轨道的音调反馈
+    PlayNoteBeep((track == TRACK_LEFT) ? 0 : 1);
 }
 
 void ReleasePlatform(long long current_time) {

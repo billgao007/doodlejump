@@ -58,7 +58,10 @@ void PlayNoteBeep(int pitch_index) {
     };
     if (pitch_index < 0) pitch_index = 0;
     if (pitch_index > 7) pitch_index = pitch_index % 8;
-    Beep(note_freqs[pitch_index], 60); // 60ms 短促提示音
+    // Beep 可能在部分系统上被禁用；MessageBeep 作为保底
+    if (!Beep(note_freqs[pitch_index], 80)) {
+        MessageBeep(MB_OK);
+    }
 }
 
 void ResetAudioTiming() {

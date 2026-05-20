@@ -253,6 +253,12 @@ void ProcessInput() {
         } else {
             key_9_pressed = 0;
         }
+
+        // ESC 退出到主菜单
+        if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) {
+            while (GetAsyncKeyState(VK_ESCAPE) & 0x8000) Sleep(10);
+            g_game.state = STATE_MENU;
+        }
     }
 
     // 节奏模式交互
