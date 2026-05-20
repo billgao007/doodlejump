@@ -8,6 +8,7 @@
 
 static int key_0_pressed = 0;
 static int key_9_pressed = 0;
+static int key_p_pressed = 0;
 static int menu_left_pressed = 0;
 static int menu_right_pressed = 0;
 static int rhythm_a_prev = 0;  // P1 录音：A 键上一帧状态
@@ -189,8 +190,38 @@ void ProcessInput() {
         return;
     }
 
+    // 暂停状态：P 恢复，ESC 返回菜单
+    if (g_game.state == STATE_PAUSED) {
+        if (GetAsyncKeyState('P') & 0x8000) {
+            if (!key_p_pressed) {
+                g_game.state = g_game.state_before_pause;
+            }
+            key_p_pressed = 1;
+        } else {
+            key_p_pressed = 0;
+        }
+        if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) {
+            while (GetAsyncKeyState(VK_ESCAPE) & 0x8000) Sleep(10);
+            g_game.state = STATE_MENU;
+            ResetRhythm();
+        }
+        return;
+    }
+
     // 游戏内交互 
     if (g_game.state == STATE_PLAYING) {
+        // 暂停检测（在移动输入之前）
+        if (GetAsyncKeyState('P') & 0x8000) {
+            if (!key_p_pressed) {
+                g_game.state_before_pause = STATE_PLAYING;
+                g_game.state = STATE_PAUSED;
+            }
+            key_p_pressed = 1;
+            return;
+        } else {
+            key_p_pressed = 0;
+        }
+
         g_game.player.vx = 0;
         
         if (GetAsyncKeyState('A') & 0x8000 || GetAsyncKeyState(VK_LEFT) & 0x8000) {
@@ -226,6 +257,18 @@ void ProcessInput() {
 
     // 节奏模式交互
     if (g_game.state == STATE_RHYTHM) {
+        // 暂停检测
+        if (GetAsyncKeyState('P') & 0x8000) {
+            if (!key_p_pressed) {
+                g_game.state_before_pause = STATE_RHYTHM;
+                g_game.state = STATE_PAUSED;
+            }
+            key_p_pressed = 1;
+            return;
+        } else {
+            key_p_pressed = 0;
+        }
+
         // P1 (录音阶段): A = 左轨道，D = 右轨道 — 按下瞬间生成一个音符
         if (g_game.rhythm_data.sub_state == RHYTHM_PHASE_RECORD) {
             // 刚切换到录音阶段时重置按键状态，避免上一轮按住带入

@@ -385,10 +385,9 @@ float GetNoteYPosition(long long note_timestamp, long long current_time, float f
     return (float)elapsed * falling_speed;
 }
 
-// 回放阶段专用：从判定线反推音符 Y 坐标
 // target_time = echo_start + relative_timestamp（音符到达判定线的时刻）
-//   → 到达判定线时 Y = JUDGMENT_Y
-//   → 提前出现时 Y < JUDGMENT_Y（从屏幕上方下落）
+//   到达判定线时 Y = JUDGMENT_Y
+//   提前出现时 Y < JUDGMENT_Y（从屏幕上方下落）
 float GetEchoNoteY(long long target_time, long long current_time, float falling_speed) {
     long long remaining = target_time - current_time;
     return (float)JUDGMENT_Y - (float)remaining * falling_speed;

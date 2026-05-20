@@ -18,7 +18,7 @@
 #define MAX_BUFFS 10
 #define MAX_PARTICLES 64
 
-typedef enum { STATE_AUTH, STATE_MENU, STATE_PLAYING, STATE_VICTORY, STATE_GAMEOVER, STATE_RHYTHM } GameState;
+typedef enum { STATE_AUTH, STATE_MENU, STATE_PLAYING, STATE_VICTORY, STATE_GAMEOVER, STATE_RHYTHM, STATE_PAUSED } GameState;
 
 typedef enum { MODE_NORMAL, MODE_RHYTHM } GameMode;
 
@@ -221,6 +221,8 @@ typedef struct {
     int damage_bonus_level;     // 伤害翻倍等级（每级翻倍一次）
     int next_damage_bonus_score; // 下次伤害翻倍需要的分数
     int boss_respawn_effect_timer; // Boss 复活特效计时器
+
+    GameState state_before_pause; // 暂停前状态，用于恢复
 } GameData;
 
 extern GameData g_game;

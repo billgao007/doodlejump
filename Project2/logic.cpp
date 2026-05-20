@@ -543,7 +543,7 @@ static void DoLogicStep() {
     if (p->x + p->radius > b->x && p->x - p->radius < b->x + b->width &&
         p->y - p->radius < b->y + b->height && p->y + p->radius > b->y) {
         int contact_dmg = (int)(15.0f * GetBossSkillDmgScale());
-        if (contact_dmg < 2) contact_dmg = 2;
+        if (contact_dmg < 2) contact_dmg = 20;
         p->hp -= contact_dmg;
         p->vy = (g_game.gravity_dir == 1) ? 5.0f : -5.0f; // 向下弹开
     }
@@ -663,7 +663,8 @@ static void DoLogicStep() {
 }
 
 void UpdateLogic() {
-    // 如果不在游戏状态（胜利界面除外），直接跳过并重置初始化标记
+    // 暂停、非游戏状态（胜利界面除外），跳过并重置初始化标记
+    if (g_game.state == STATE_PAUSED) return;
     if (g_game.state != STATE_PLAYING && g_game.state != STATE_VICTORY) {
         logic_initialized = 0; 
         return;

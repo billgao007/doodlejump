@@ -763,6 +763,24 @@ void RenderFrame() {
     case STATE_VICTORY: DrawVictory(); break;
     case STATE_GAMEOVER: DrawGameOver(); break;
     case STATE_RHYTHM: DrawRhythm(); break;
+    case STATE_PAUSED:
+        // 先画游戏画面，再覆盖半透明遮罩
+        if (g_game.state_before_pause == STATE_RHYTHM) DrawRhythm();
+        else DrawGame();
+        // 半透明黑色遮罩
+        setfillcolor(RGB(0, 0, 0));
+        setlinecolor(RGB(0, 0, 0));
+        setlinestyle(PS_SOLID, 1);
+        for (int i = 0; i < SCREEN_HEIGHT; i += 2) {
+            line(0, i, SCREEN_WIDTH, i);
+        }
+        // 暂停文字
+        settextcolor(RGB(255, 255, 255)); settextstyle(40, 0, _T("Consolas"));
+        outtextxy(120, 250, _T("PAUSED"));
+        settextcolor(RGB(200, 200, 200)); settextstyle(16, 0, _T("Consolas"));
+        outtextxy(95, 310, _T("Press P to Resume"));
+        outtextxy(100, 335, _T("Press ESC to Quit"));
+        break;
     }
     FlushBatchDraw();
 }
