@@ -570,17 +570,6 @@ static void DrawRhythm() {
                     solidcircle((int)note_x, (int)note_y, 22);
                 }
 
-                // 拖尾虚影
-                for (int t = 1; t <= 5; t++) {
-                    float ty = note_y - t * 8.0f;
-                    if (ty < -20) break;
-                    int alpha = 100 - t * 18;
-                    if (alpha < 0) alpha = 0;
-                    // EasyX putimage 不支持透明度，用淡色矩形模拟
-                    setfillcolor(RGB(alpha + 100, alpha + 100, alpha + 100));
-                    solidrectangle(ix - 1, (int)ty - 1, ix + 31, (int)ty + 31);
-                }
-
                 // 绘制 player.png
                 putimage(ix, iy, &img_player);
             }
